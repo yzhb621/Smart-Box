@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>History Page</title>
+  <style>
+    /* ===== Reset ===== */
+    * { margin:0; padding:0; box-sizing:border-box; font-family: Inter, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+
+    /* ===== Themes (same as other pages) ===== */
+    body { min-height:100vh; display:flex; flex-direction:column; }
+    body.light-theme{
+      background:
+        radial-gradient(1200px circle at 85% 10%, rgba(255,255,255,.35) 0%, rgba(255,255,255,0) 40%),
+        linear-gradient(135deg, #dff8ff 0%, #afe9f5 40%, #6ed3e6 100%);
+      color:#223;
+    }
+    body.dark-theme{
+      background:
+        radial-gradient(900px circle at 15% 10%, rgba(255,255,255,.08) 0%, rgba(255,255,255,0) 35%),
+        linear-gradient(135deg, #101418 0%, #1e2a33 50%, #0f2530 100%);
+      color:#f0f0f0;
+    }
+
+    /* ===== Navbar ===== */
+    .navbar{
+      background:#ffffffee;
+      padding:15px 30px;
+      display:flex; justify-content:space-between; align-items:center;
+      box-shadow:0 2px 6px rgba(0,0,0,.1);
+      backdrop-filter: blur(6px);
+    }
+    .navbar h1{ font-size:26px; color:#007bff; margin:0; }
+    .nav-right{ display:flex; align-items:center; gap:15px; }
+    .sign-in-button, .home-button{
+      cursor:pointer; font-weight:600; color:#007bff; background:#fff;
+      border:1px solid #007bff; padding:8px 16px; border-radius:6px; transition:.3s; text-decoration:none;
+    }
+    .sign-in-button:hover, .home-button:hover{ background:#007bff; color:#fff; }
+    .avatar{ font-weight:700; color:green; white-space:nowrap; }
+
+    /* ===== Layout ===== */
+    .container{ width:100%; padding:28px 16px 60px; }
+    .wrap{ max-width: 1000px; margin: 20px auto; }
+
+    /* ===== Card (glassmorphism) ===== */
+    .card{
+      background: rgba(255,255,255,0.22);
+      border: 1px solid rgba(0, 123, 255, 0.25);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 8px 30px rgba(16,24,40,0.08);
+    }
+    .dark-theme .card{
+      background: rgba(16, 20, 24, 0.48);
+      border-color: rgba(79,179,255,0.35);
+    }
+
+    .nav-row{ display:flex; gap:12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .btn{
+      padding: 8px 12px; border: 1px solid #007bff; border-radius: 8px;
+      cursor:pointer; font-weight:600; background:#fff; color:#007bff; box-shadow:0 1px 3px rgba(16,24,40,0.06);
+      transition:.2s;
+    }
+    .btn:hover{ background:#007bff; color:#fff; }
+    .dark-theme .btn{ background: rgba(255,255,255,0.12); color:#bfe6ff; border-color:#4fb3ff; }
+    .dark-theme .btn:hover{ background:#4fb3ff; color:#04223a; }
+
+    h2.title{ margin:6px 0 12px; font-weight:800; color:#0f172a; }
+    .dark-theme h2.title{ color:#e6eef6; }
+
+    /* ===== Table ===== */
+    .table-wrap{ overflow:hidden; border-radius:10px; border:1px solid #e6eefc; }
+    .dark-theme .table-wrap{ border-color: rgba(79,179,255,0.25); }
+    table{ border-collapse:separate; border-spacing:0; width:100%; background:transparent; }
+    thead tr{ background: linear-gradient(90deg,#ffffff,#fbfdff); }
+    .dark-theme thead tr{ background: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)); }
+    thead th{
+      text-align:left; padding:12px 14px; font-size:13px; color:#344054;
+    }
+    .dark-theme thead th{ color:#d7e6f2; }
+    tbody td{
+      padding:10px 14px; font-size:14px; color:#101828; border-bottom:1px solid #f1f5f9;
+    }
+    .dark-theme tbody td{ color:#e8eef3; border-bottom-color: rgba(255,255,255,0.08); }
+
+    th:first-child, td:first-child{ width:220px; }
+    th:last-child,  td:last-child{ width:180px; text-align:left; }
+    .empty{ padding:16px; color:#666; }
+    .dark-theme .empty{ color:#b7c6d1; }
+
+    /* ===== Badges ===== */
+    .badge{ display:inline-block; padding:4px 10px; border-radius:6px; font-size:13px; color:#fff; font-weight:700; }
+    .badge-green{ background:#28a745; }
+
+    /* ===== Theme Toggle (Right-Bottom) ===== */
+    .theme-toggle{
+      position: fixed; right: 20px; bottom: 20px; z-index: 1000;
+      background: #ffffffdd; border: 1px solid #007bff; border-radius: 999px;
+      padding: 6px; box-shadow: 0 2px 6px rgba(0,0,0,.2);
+      display: flex; align-items: center; gap: 6px; backdrop-filter: blur(6px);
+    }
+    .theme-toggle .chip{
+      border: none; padding: 8px 14px; border-radius: 999px; cursor: pointer; font-weight: 800;
+      background: transparent; color: #007bff; transition: .2s;
+    }
+    .theme-toggle .chip.active{ background: #007bff; color: #fff; }
+    .dark-theme .theme-toggle{ background: #1f2a33dd; border-color: #4fb3ff; }
+    .dark-theme .theme-toggle .chip{ color: #bfe6ff; }
+    .dark-theme .theme-toggle .chip.active{ background: #4fb3ff; color: #04223a; }
+  </style>
+</head>
+<body class="light-theme">
+  <script src="/auth.js"></script>
+
+  <!-- Navbar -->
+  <div class="navbar">
+    <h1>Smart Courier Box</h1>
+    <div class="nav-right">
+      <span id="signInBtn" class="sign-in-button">Sign In</span>
+      <span id="avatar" class="avatar" style="display:none;">
+        <a href="/profile" id="profileLink" style="text-decoration:none; color:green;">
+          👤 <span id="userEmailDisplay"></span>
+        </a> |
+        <a href="#" onclick="logout()">Logout</a>
+      </span>
+      <button class="home-button" onclick="window.location.href='/home'">🏠 Home</button>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="container">
+    <div class="wrap">
+      <div class="card">
+        <div class="nav-row">
+          <button class="btn" onclick="window.location.href='/profile'">Back to Profile</button>
+          <button class="btn" onclick="logout()">Logout</button>
+        </div>
+
+        <h2 class="title">User History</h2>
+
+        <div class="table-wrap">
+          <table id="historyTable">
+            <thead>
+              <tr><th>Delivery Date</th><th>Status</th><th>Location</th><th>SCB Serial #</th><th>Key</th></tr>
+            </thead>
+            <tbody><tr><td class="empty" colspan="5">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Theme Toggle -->
+  <div class="theme-toggle" role="group" aria-label="Theme switch">
+    <button id="themeLight" class="chip active" aria-pressed="true" type="button">Light</button>
+    <button id="themeDark"  class="chip" aria-pressed="false" type="button">Dark</button>
+  </div>
+
+  <script>
+    /* ========= Auth helpers ========= */
+    function isLoggedIn(){ return !!localStorage.getItem('uid'); }
+    function currentUid(){ return localStorage.getItem('uid') || ''; }
+
+    /* ========= Theme sync with backend (same as other pages) ========= */
+    async function saveThemeToProfile(theme){
+      if (!isLoggedIn() || !currentUid()) return;
+      try{
+        await SCBAuth.fetch(`/api/profile/${encodeURIComponent(currentUid())}`, {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({ theme })
+        });
+      }catch(e){ console.log('Theme sync failed:', e); }
+    }
+
+    function applyTheme(theme){
+      const t = (theme === 'dark') ? 'dark' : 'light';
+      document.body.classList.remove('light-theme','dark-theme');
+      document.body.classList.add(t + '-theme');
+
+      // toggle UI
+      const lightBtn = document.getElementById('themeLight');
+      const darkBtn  = document.getElementById('themeDark');
+      if (t === 'dark'){
+        lightBtn.classList.remove('active'); lightBtn.setAttribute('aria-pressed','false');
+        darkBtn.classList.add('active');     darkBtn.setAttribute('aria-pressed','true');
+      } else {
+        darkBtn.classList.remove('active');  darkBtn.setAttribute('aria-pressed','false');
+        lightBtn.classList.add('active');    lightBtn.setAttribute('aria-pressed','true');
+      }
+
+      try { localStorage.setItem('theme', t); } catch(e){}
+      saveThemeToProfile(t);
+    }
+
+    async function fetchAndApplyThemeFromProfile(){
+      if (!isLoggedIn() || !currentUid()) return null;
+      try{
+        const res = await SCBAuth.fetch(`/api/profile/${encodeURIComponent(currentUid())}`);
+        if (!res.ok) throw new Error('profile fetch failed');
+        const data = await res.json();
+        if (data && data.theme){
+          applyTheme(data.theme);
+          return data.theme;
+        }
+        return null;
+      }catch(e){ console.log('Fetch theme failed:', e); return null; }
+    }
+
+    (async function initTheme(){
+      const local = (localStorage.getItem('theme') === 'dark') ? 'dark' : 'light';
+      applyTheme(local);
+      document.getElementById('themeLight').addEventListener('click', ()=>applyTheme('light'));
+      document.getElementById('themeDark').addEventListener('click',  ()=>applyTheme('dark'));
+      try { if (window.SCBAuth && SCBAuth.ready) await SCBAuth.ready(); } catch(_) {}
+      if (isLoggedIn() && currentUid()){ fetchAndApplyThemeFromProfile(); }
+    })();
+
+    /* ========= Navbar UI ========= */
+    const signInBtn = document.getElementById('signInBtn');
+    const avatar = document.getElementById('avatar');
+    function getEmailForDisplay(){
+      try { const e = localStorage.getItem('email'); if (e) return e; } catch(e){}
+      try { if (window.SCBAuth && SCBAuth.getEmailSync) return SCBAuth.getEmailSync(); } catch(e){}
+      return '';
+    }
+    function updateNavbarUI(){
+      const loggedIn = isLoggedIn();
+      const email = getEmailForDisplay();
+      signInBtn.style.display = loggedIn ? 'none' : 'inline-block';
+      avatar.style.display    = loggedIn ? 'inline-block' : 'none';
+  document.getElementById('userEmailDisplay').textContent = loggedIn ? (email || '') : '';
+    }
+    updateNavbarUI();
+
+    async function logout() { try { await SCBAuth.signOut(); } catch(e){}; try { localStorage.setItem('signedOutAt', Date.now().toString()); } catch (e) {}; window.location.replace('/home'); }
+
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'signedOutAt') window.location.replace('/home');
+    });
+
+    /* ========= History page logic ========= */
+    function tsToMs(ts) {
+      if (!ts) return null;
+      try {
+        if (typeof ts === 'object') {
+          if (ts.seconds) return ts.seconds * 1000 + (ts.nanoseconds ? Math.floor(ts.nanoseconds/1000000) : 0);
+          if (ts._seconds) return ts._seconds * 1000 + (ts._nanoseconds ? Math.floor(ts._nanoseconds/1000000) : 0);
+          const d = new Date(ts);
+          if (!isNaN(d.getTime())) return d.getTime();
+        }
+        if (typeof ts === 'number') { return ts > 1e12 ? ts : ts * 1000; }
+        if (typeof ts === 'string') {
+          const n = Number(ts);
+          if (!isNaN(n)) return n > 1e12 ? n : n * 1000;
+          const d = Date.parse(ts);
+          if (!isNaN(d)) return d;
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    async function loadHistory() {
+      const uid = currentUid();
+      const tbody = document.querySelector('#historyTable tbody');
+      tbody.innerHTML = '<tr><td class="empty" colspan="5">Loading...</td></tr>';
+
+      if (!uid){
+        tbody.innerHTML = '<tr><td class="empty" colspan="5">Please sign in to view your history.</td></tr>';
+        return;
+      }
+
+      try {
+        const res = await SCBAuth.fetch(`/api/history/${uid}`);
+        if (!res.ok) throw new Error('Failed to fetch history');
+        const data = await res.json();
+
+        data.sort((a,b) => {
+          const ta = tsToMs(a.createdAt) || tsToMs(a.date) || 0;
+          const tb = tsToMs(b.createdAt) || tsToMs(b.date) || 0;
+          return tb - ta;
+        });
+
+        if (!data.length) {
+          tbody.innerHTML = '<tr><td class="empty" colspan="5">No history yet.</td></tr>';
+          return;
+        }
+
+        const rows = data.map(d => {
+          const ms = tsToMs(d.createdAt) || tsToMs(d.date) || Date.now();
+          const dateStr = new Date(ms).toLocaleString();
+          const areaLoc = d.areaName
+            ? `<div style="margin-top:4px;font-size:13px;">${d.areaName}</div>`
+            : (d.areaId ? `<div style="margin-top:4px;font-size:13px;">Area ID: ${d.areaId}</div>` : '');
+
+          let serialDisplay = '';
+          if (d.serialNumber) {
+            const digits = String(d.serialNumber).replace(/\D/g, '');
+            if (digits.length >= 8) serialDisplay = digits.slice(-8);
+            else serialDisplay = digits.padStart(8, '0');
+            serialDisplay = `<div style="margin-top:4px;font-size:13px;">${serialDisplay}</div>`;
+          }
+
+          const qrLink = d.qrKeyId
+            ? `<a href="https://smart-courier-box.vercel.app/qr?c=${d.qrKeyId}" target="_blank">${d.qrKeyId}</a>`
+            : '';
+
+          const rawStatus = (d.action || d.status || '').toString();
+          const sNorm = rawStatus.trim().toLowerCase();
+          let statusHtml = rawStatus || '-';
+          if (sNorm === 'good' || sNorm === 'delivered') {
+            statusHtml = `<span class="badge badge-green">Delivered</span>`;
+          }
+
+          return `<tr>
+            <td>${dateStr}</td>
+            <td>${statusHtml}</td>
+            <td>${areaLoc || '-'}</td>
+            <td>${serialDisplay || '-'}</td>
+            <td style="min-width:180px">${qrLink || '-'}</td>
+          </tr>`;
+        });
+
+        tbody.innerHTML = rows.join('');
+      } catch (e) {
+        console.error(e);
+        tbody.innerHTML = `<tr><td class="empty" colspan="5">Failed to load: ${e.message}</td></tr>`;
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      try { if (window.SCBAuth && SCBAuth.ready) await SCBAuth.ready(); } catch(_) {}
+      loadHistory();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin Panel - Boxes</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 24px; background: #f7f9fc; }
+    .nav { display:flex; gap:12px; margin-bottom: 16px; }
+    button { padding: 8px 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.1); }
+    table { border-collapse: collapse; width: 100%; margin-top: 16px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.1); }
+    th, td { border: 1px solid #eee; padding: 10px; text-align: left; }
+    th { background-color: #fafafa; }
+    .empty { padding: 16px; color: #666; }
+  .status-normal { color: #0a7a0a; font-weight:600; }
+  .status-issue { color: #a00; font-weight:600; }
+  </style>
+</head>
+<body>
+  <script src="/auth.js"></script>
+  <div class="nav">
+    <button onclick="window.location.href='/profile'">Back to Profile</button>
+    <button onclick="logout()">Logout</button>
+  </div>
+
+  <h2>SCB Database</h2>
+
+  <div style="margin-top:12px">
+  <button id="openFormBtn" onclick="toggleForm()">+ Add SCB</button>
+  <button id="openReportBtn" onclick="toggleReportForm()">Report</button>
+    <div style="display:inline-block; margin-left:12px; vertical-align:middle;">
+      <input id="boxSearchInput" type="text" placeholder="Search Box ID (0000-00000004) or Post Code" style="padding:8px; border:1px solid #ddd; border-radius:6px; width:260px;" />
+      <button id="boxSearchClear" style="margin-left:8px;">Clear</button>
+    </div>
+    <button id="refreshBtn" type="button" style="float:right; margin-right:6px;">Refresh</button>
+    <div id="boxForm" style="display:none; margin-top:12px; background:#fff; padding:12px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.08); max-width:460px;">
+      <label>Post Code (4 digits)</label>
+      <input id="postCodeInput" type="text" maxlength="4" style="width:120px; padding:8px; margin-top:6px; border:1px solid #ddd; border-radius:6px;" />
+      
+      <label style="display:block; margin-top:8px;">Street Number</label>
+      <input id="streetNumInput" type="text" style="width:120px; padding:8px; margin-top:6px; border:1px solid #ddd; border-radius:6px;" />
+      
+      <label style="display:block; margin-top:8px;">Street Name</label>
+      <input id="streetNameInput" type="text" style="width:320px; padding:8px; margin-top:6px; border:1px solid #ddd; border-radius:6px;" />
+      
+      <label style="display:block; margin-top:8px;">City</label>
+      <input id="cityInput" type="text" style="width:320px; padding:8px; margin-top:6px; border:1px solid #ddd; border-radius:6px;" />
+      
+      <label style="display:block; margin-top:8px;">Location Description</label>
+      <textarea id="locationDescInput" style="width:320px; padding:8px; margin-top:6px; border:1px solid #ddd; border-radius:6px; height:80px;" placeholder="e.g., Next to main entrance, Behind reception desk"></textarea>
+      
+      <div style="margin-top:12px; display:flex; gap:8px;">
+        <button onclick="createBox()">Create Box</button>
+        <button onclick="toggleForm(true)">Cancel</button>
+      </div>
+      <div id="formMsg" style="margin-top:8px;color:#d00"></div>
+    </div>
+    <div id="reportForm" style="display:none; margin-top:12px; background:#fff; padding:12px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.08); max-width:560px;">
+    <label style="margin-top:8px; display:block;">Box ID (required, e.g. 55-00000001)</label>
+  <input id="reportBoxId" type="text" style="width:200px; padding:8px; margin-top:6px; border:1px solid #ddd; border-radius:6px;" />
+      <label style="margin-top:8px; display:block;">Status</label>
+      <select id="reportStatus" style="width:100%; padding:8px; border-radius:6px; margin-top:6px;">
+        <option value="Normal">Normal</option>
+        <option value="Issue">Issue</option>
+      </select>
+      <label style="margin-top:8px; display:block;">Description</label>
+  <textarea id="reportDescription" style="width:100%; max-width:420px; padding:8px; margin-top:6px; border:1px solid #ddd; border-radius:6px;" rows="2" placeholder="Short description (optional)"></textarea>
+      <div style="margin-top:8px; display:flex; gap:8px;">
+        <button onclick="submitReport()">Submit Report</button>
+        <button onclick="toggleReportForm(true)">Cancel</button>
+      </div>
+      <div id="reportMsg" style="margin-top:8px;color:#d00"></div>
+    </div>
+
+  </div>
+
+  <table id="boxesTable">
+    <thead>
+      <tr>
+        <th>Box ID</th>
+        <th>Location</th>
+        <th id="statusHeader" style="cursor:pointer">Status <span id="statusSortArrow" style="font-size:12px;margin-left:6px"></span></th>
+        <th id="recentHeader" style="cursor:pointer">Recent Delivery <span id="recentSortArrow" style="font-size:12px;margin-left:6px"></span></th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody><tr><td class="empty" colspan="6">Loading...</td></tr></tbody>
+  </table>
+
+  <script>
+    function formatTimestamp(ts) {
+      if (!ts) return null;
+      // Firestore Timestamp-like { seconds, nanos }
+      if (typeof ts === 'object') {
+        if (ts.seconds) return new Date(ts.seconds * 1000).toLocaleString();
+        if (ts._seconds) return new Date(ts._seconds * 1000).toLocaleString();
+        // if it's already a Date-ish object
+        try {
+          const maybeDate = new Date(ts);
+          if (!isNaN(maybeDate.getTime())) return maybeDate.toLocaleString();
+        } catch (e) {}
+        return null;
+      }
+      // number: could be seconds or milliseconds
+      if (typeof ts === 'number') {
+        if (ts > 1e12) return new Date(ts).toLocaleString(); // ms
+        return new Date(ts * 1000).toLocaleString(); // seconds
+      }
+      // string: try ISO parse, or numeric
+      if (typeof ts === 'string') {
+        const n = Number(ts);
+        if (!isNaN(n)) {
+          if (n > 1e12) return new Date(n).toLocaleString();
+          return new Date(n * 1000).toLocaleString();
+        }
+        const d = new Date(ts);
+        if (!isNaN(d.getTime())) return d.toLocaleString();
+      }
+      return null;
+    }
+  // In-memory store of boxes fetched from server
+  window.boxesData = [];
+  // sort state: 'none' | 'asc' | 'desc'
+  let recentSort = 'none';
+  let statusSort = 'none';
+
+    function parseTimestampToMs(ts) {
+      if (!ts) return null;
+      try {
+        if (typeof ts === 'object') {
+          if (ts.seconds) return ts.seconds * 1000 + (ts.nanoseconds ? Math.floor(ts.nanoseconds/1000000) : 0);
+          if (ts._seconds) return ts._seconds * 1000 + (ts._nanoseconds ? Math.floor(ts._nanoseconds/1000000) : 0);
+          // Date-like
+          const d = new Date(ts);
+          if (!isNaN(d.getTime())) return d.getTime();
+        }
+        if (typeof ts === 'number') {
+          if (ts > 1e12) return ts; // ms
+          return ts * 1000; // seconds
+        }
+        if (typeof ts === 'string') {
+          const n = Number(ts);
+          if (!isNaN(n)) return n > 1e12 ? n : n * 1000;
+          const d = Date.parse(ts);
+          if (!isNaN(d)) return d;
+        }
+      } catch (e) {}
+      return null;
+    }
+
+  function renderBoxes(data) {
+      const tbody = document.querySelector('#boxesTable tbody');
+      if (!data || !data.length) {
+        tbody.innerHTML = '<tr><td class="empty" colspan="5">No SCB boxes found.</td></tr>';
+        return;
+      }
+      const rows = data.map(b => {
+        const id = b.id || '';
+        const status = (b.status || 'working');
+        const statusClass = (String(status).toLowerCase() === 'issue') ? 'status-issue' : 'status-normal';
+        let recent = '';
+        if (b.recentDeliveryCreatedAt) {
+          const formatted = formatTimestamp(b.recentDeliveryCreatedAt);
+          recent = formatted || '';
+        } else {
+          recent = '';
+        }
+
+        // Format address data
+        const address = b.address || {};
+        const displayCity = address.city || '';
+        const fullAddress = address.streetNumber && address.streetName ? 
+          `${address.streetNumber} ${address.streetName}, ${address.city}` : displayCity;
+        
+        return `<tr class="box-row">
+          <td>${id}</td>
+          <td class="location-cell" style="cursor:pointer;" 
+              data-address="${fullAddress.replace(/"/g,'&quot;')}"
+              data-description="${(b.locationDescription||'').replace(/"/g,'&quot;')}">
+            ${displayCity}
+          </td>
+          <td class="status-cell ${statusClass}" style="cursor:pointer;"
+              data-description="${(b.description||'').replace(/"/g,'&quot;')}">
+            ${status}
+          </td>
+          <td>${recent}</td>
+          <td>
+            <button class="delete-btn" data-id="${id}">Delete</button>
+            <button onclick="showReportForm('${id}')" style="margin-left:8px;">Report</button>
+          </td>
+        </tr>`;
+      });
+      tbody.innerHTML = rows.join('');
+
+      // Attach click handlers
+      document.querySelectorAll('.box-row').forEach(r => {
+        const locationCell = r.querySelector('.location-cell');
+        const statusCell = r.querySelector('.status-cell');
+        const deleteBtn = r.querySelector('.delete-btn');
+
+        // Location click handler
+        if (locationCell) {
+          locationCell.addEventListener('click', () => {
+            const address = locationCell.getAttribute('data-address');
+            const description = locationCell.getAttribute('data-description');
+            showLocationDetails(address, description);
+          });
+        }
+
+        // Status click handler
+        if (statusCell) {
+          statusCell.addEventListener('click', () => {
+            const desc = statusCell.getAttribute('data-description') || '';
+            openDescriptionWindow(desc || 'No status description available');
+          });
+        }
+
+        // Delete button handler
+        if (deleteBtn) {
+          deleteBtn.addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const id = deleteBtn.getAttribute('data-id');
+            if (!id) return;
+            if (!confirm('Are you sure you want to delete this box? This cannot be undone.')) return;
+            try {
+              const resp = await SCBAuth.fetch(`/api/boxes/${encodeURIComponent(id)}`, { method: 'DELETE' });
+              const j = await resp.json();
+              if (!resp.ok) throw new Error(j && j.error ? j.error : 'Delete failed');
+              await loadBoxes();
+            } catch (e) {
+              alert('Delete failed: ' + (e.message || e));
+            }
+          });
+        }
+      });
+    }
+
+  async function loadBoxes() {
+      const tbody = document.querySelector('#boxesTable tbody');
+      tbody.innerHTML = '<tr><td class="empty" colspan="6">Loading...</td></tr>';
+      try {
+        const res = await SCBAuth.fetch('/api/boxes?type=SCB');
+        if (!res.ok) throw new Error('Failed to fetch boxes');
+        const data = await res.json();
+        window.boxesData = data || [];
+        // Normalize/validate recentDeliveryCreatedAt: ensure it's a proper timestamp, otherwise clear it
+        window.boxesData.forEach(b => {
+          const ms = parseTimestampToMs(b.recentDeliveryCreatedAt);
+          if (ms === null) b.recentDeliveryCreatedAt = null;
+        });
+    // apply current sort/search state
+    applySearchFilter();
+      } catch (e) {
+        console.error(e);
+        tbody.innerHTML = `<tr><td class="empty" colspan="6">Failed to load: ${e.message}</td></tr>`;
+      }
+    }
+
+    // Header click toggles sort state and re-renders
+    document.addEventListener('DOMContentLoaded', () => {
+      const header = document.getElementById('recentHeader');
+      const arrow = document.getElementById('recentSortArrow');
+      const searchInput = document.getElementById('boxSearchInput');
+      const clearBtn = document.getElementById('boxSearchClear');
+      if (header) {
+        header.addEventListener('click', () => {
+          // clicking Recent clears status sort
+          statusSort = 'none';
+          const statusArrowEl = document.getElementById('statusSortArrow');
+          if (statusArrowEl) statusArrowEl.textContent = '';
+          if (recentSort === 'none' || recentSort === 'asc') recentSort = 'desc'; else recentSort = 'asc';
+          // update arrow
+          if (arrow) arrow.textContent = recentSort === 'desc' ? '↓' : (recentSort === 'asc' ? '↑' : '');
+          // apply filter which will also sort
+          applySearchFilter();
+        });
+      }
+      // Status header click toggles status sort and clears recent sort
+      const statusHeaderEl = document.getElementById('statusHeader');
+      const statusArrow = document.getElementById('statusSortArrow');
+      if (statusHeaderEl) {
+        statusHeaderEl.addEventListener('click', () => {
+          // clear recent sort
+          recentSort = 'none';
+          const recentArrowEl = document.getElementById('recentSortArrow');
+          if (recentArrowEl) recentArrowEl.textContent = '';
+          if (statusSort === 'none' || statusSort === 'asc') statusSort = 'desc'; else statusSort = 'asc';
+          if (statusArrow) statusArrow.textContent = statusSort === 'desc' ? '↓' : (statusSort === 'asc' ? '↑' : '');
+          applySearchFilter();
+        });
+      }
+      if (searchInput) {
+        searchInput.addEventListener('input', () => applySearchFilter());
+      }
+      if (clearBtn) {
+        clearBtn.addEventListener('click', () => { searchInput.value = ''; applySearchFilter(); });
+      }
+    // area form toggle button wiring
+    const openAreaBtn = document.getElementById('openAreaBtn');
+    const areaForm = document.getElementById('areaForm');
+    if (areaForm) areaForm.style.display = 'none';
+  if (openAreaBtn) openAreaBtn.addEventListener('click', () => toggleAreaForm());
+  const refreshBtn = document.getElementById('refreshBtn');
+  if (refreshBtn) refreshBtn.addEventListener('click', () => loadBoxes());
+    });
+
+    function applySearchFilter() {
+      const q = (document.getElementById('boxSearchInput').value || '').trim();
+      let data = (window.boxesData || []).slice();
+      if (q) {
+        const ql = q.toLowerCase();
+        data = data.filter(b => {
+          // Search by Box ID
+          if (q.indexOf('-') !== -1 && (b.id || '').toLowerCase().includes(ql)) {
+            return true;
+          }
+          // Search by Post Code (first 4 digits of the ID)
+          const postCode = b.id ? b.id.split('-')[0] : '';
+          return postCode.includes(q);
+        });
+      }
+      // apply sort: status sort has priority, else recent sort
+      if (statusSort !== 'none') {
+        const desc = statusSort === 'desc';
+        data.sort((a,b) => {
+          const sa = (a.status || '').toLowerCase();
+          const sb = (b.status || '').toLowerCase();
+          if (sa < sb) return desc ? 1 : -1;
+          if (sa > sb) return desc ? -1 : 1;
+          return 0;
+        });
+      } else if (recentSort !== 'none') {
+        const desc = recentSort === 'desc';
+        data.sort((a,b) => {
+          const ta = parseTimestampToMs(a.recentDeliveryCreatedAt);
+          const tb = parseTimestampToMs(b.recentDeliveryCreatedAt);
+          const na = ta === null ? -8640000000000000 : ta;
+          const nb = tb === null ? -8640000000000000000 : tb;
+          return desc ? nb - na : na - nb;
+        });
+      }
+      renderBoxes(data);
+    }
+
+    function toggleAreaForm(close) {
+      const f = document.getElementById('areaForm');
+      const btn = document.getElementById('openAreaBtn');
+      if (close === true) { if (f) f.style.display = 'none'; if (btn) btn.textContent = '+ Add Area'; return; }
+      if (f.style.display === 'none') { f.style.display = ''; if (btn) btn.textContent = 'Hide Area'; } else { f.style.display = 'none'; if (btn) btn.textContent = '+ Add Area'; }
+    }
+
+    async function createArea() {
+      const idInput = document.getElementById('areaIdInput');
+      const locInput = document.getElementById('areaLocationInput');
+      const msg = document.getElementById('areaMsg');
+      msg.textContent = '';
+      const areaId = (idInput.value || '').trim();
+      const location = (locInput.value || '').trim();
+      if (!/^[0-9]{2}$/.test(areaId)) { msg.textContent = 'Area Id must be 2 digits'; return; }
+      if (!location) { msg.textContent = 'Location is required'; return; }
+      try {
+        const res = await SCBAuth.fetch('/api/areas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ areaId, area: location }) });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j && j.error ? j.error : 'Create failed');
+        msg.style.color = '#080'; msg.textContent = 'Area created';
+        idInput.value = ''; locInput.value = '';
+        toggleAreaForm(true);
+      } catch (e) { msg.style.color = '#d00'; msg.textContent = e.message || String(e); }
+    }
+
+    async function logout() {
+      try { await SCBAuth.signOut(); } catch (e) { console.warn('SignOut failed', e); }
+      try { localStorage.setItem('signedOutAt', Date.now().toString()); } catch (e) {}
+      window.location.replace('/home');
+    }
+    async function createBox() {
+      const postCodeInput = document.getElementById('postCodeInput');
+      const streetNumInput = document.getElementById('streetNumInput');
+      const streetNameInput = document.getElementById('streetNameInput');
+      const cityInput = document.getElementById('cityInput');
+      const locationDescInput = document.getElementById('locationDescInput');
+      const msg = document.getElementById('formMsg');
+      
+      msg.textContent = '';
+      
+      // Get and validate all inputs
+      const postCode = (postCodeInput.value || '').trim();
+      const streetNum = (streetNumInput.value || '').trim();
+      const streetName = (streetNameInput.value || '').trim();
+      const city = (cityInput.value || '').trim();
+      const locationDesc = (locationDescInput.value || '').trim();
+      
+      // Validation
+      if (!/^\d{4}$/.test(postCode)) { 
+        msg.textContent = 'Post Code must be 4 digits'; 
+        return; 
+      }
+      if (!streetNum) { 
+        msg.textContent = 'Street Number is required'; 
+        return; 
+      }
+      if (!streetName) { 
+        msg.textContent = 'Street Name is required'; 
+        return; 
+      }
+      if (!city) { 
+        msg.textContent = 'City is required'; 
+        return; 
+      }
+      if (!locationDesc) { 
+        msg.textContent = 'Location Description is required'; 
+        return; 
+      }
+      
+      try {
+        const res = await SCBAuth.fetch('/api/boxes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            postCode,
+            address: {
+              streetNumber: streetNum,
+              streetName,
+              city
+            },
+            locationDescription: locationDesc
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data && data.error ? data.error : 'Create failed');
+        
+        // Clear form and reload
+        toggleForm(true);
+        postCodeInput.value = '';
+        streetNumInput.value = '';
+        streetNameInput.value = '';
+        cityInput.value = '';
+        locationDescInput.value = '';
+        await loadBoxes();
+      } catch (e) {
+        console.error(e);
+        msg.textContent = e.message || String(e);
+      }
+    }
+
+    function toggleForm(close) {
+      const form = document.getElementById('boxForm');
+      const btn = document.getElementById('openFormBtn');
+      if (close === true) { form.style.display = 'none'; btn.textContent = '+ Add SCB'; return; }
+      if (form.style.display === 'none') { form.style.display = ''; btn.textContent = 'Hide'; } else { form.style.display = 'none'; btn.textContent = '+ Add SCB'; }
+    }
+
+    function toggleReportForm(close) {
+      const form = document.getElementById('reportForm');
+      const btn = document.getElementById('openReportBtn');
+      if (close === true) { form.style.display = 'none'; btn.textContent = 'Report'; return; }
+      if (form.style.display === 'none') { form.style.display = ''; btn.textContent = 'Hide Report'; } else { form.style.display = 'none'; btn.textContent = 'Report'; }
+    }
+
+    async function submitReport() {
+    const boxId = document.getElementById('reportBoxId').value.trim();
+      const status = document.getElementById('reportStatus').value;
+      const desc = document.getElementById('reportDescription').value.trim();
+      const msg = document.getElementById('reportMsg');
+      msg.textContent = '';
+    if (!boxId) { msg.textContent = 'Enter a Box ID (e.g. 55-00000001)'; return; }
+      try {
+        const res = await SCBAuth.fetch('/api/boxes/report', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: boxId, status, description: desc })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data && data.error ? data.error : 'Report failed');
+        msg.style.color = '#080'; msg.textContent = `Updated ${data.updated} boxes.`;
+        await loadBoxes();
+      } catch (e) { msg.style.color = '#d00'; msg.textContent = e.message || String(e); }
+    }
+
+    // Open the report form and prefill the Box ID when clicking a row's Report button
+    function showReportForm(boxId) {
+      try {
+        const form = document.getElementById('reportForm');
+        const btn  = document.getElementById('openReportBtn');
+        const idInput = document.getElementById('reportBoxId');
+        const statusSel = document.getElementById('reportStatus');
+        const descInput = document.getElementById('reportDescription');
+        const msg = document.getElementById('reportMsg');
+        if (msg) msg.textContent = '';
+        if (idInput) idInput.value = boxId || '';
+        if (statusSel) statusSel.value = 'Normal';
+        if (descInput) descInput.value = '';
+        if (form) form.style.display = '';
+        if (btn) btn.textContent = 'Hide Report';
+      } catch (_) {}
+    }
+
+    function openDescriptionWindow(desc) {
+  closeAllModals();
+  const backdrop = document.getElementById('modalBackdrop');
+  const modal = document.getElementById('descriptionModal');
+  const body = document.getElementById('descriptionBody');
+  body.textContent = desc || '(empty)';
+  backdrop.style.display = 'block';
+  modal.style.display = 'block';
+    }
+
+  window.addEventListener('DOMContentLoaded', async () => { try { if (window.SCBAuth && SCBAuth.ready) await SCBAuth.ready(); } catch(_){}; loadBoxes(); });
+
+    // Modal / window to show deliveries
+    async function openDeliveriesWindow(areaId, serial, location) {
+      // fetch parcels
+      const modal = document.getElementById('deliveriesModal');
+      const list = document.getElementById('deliveriesList');
+      const title = document.getElementById('deliveriesTitle');
+      // Title: use location if available, followed by serial number
+      const loc = location || '';
+      const serialPart = serial ? ` — ${serial}` : '';
+      title.textContent = `${loc || ('area ' + areaId)}${serialPart}`;
+      list.innerHTML = '<li>Loading...</li>';
+  closeAllModals();
+  const backdrop = document.getElementById('modalBackdrop');
+  backdrop.style.display = 'block';
+  modal.style.display = 'block';
+      try {
+        const res = await SCBAuth.fetch(`/api/parcels?areaId=${encodeURIComponent(areaId)}`);
+        if (!res.ok) throw new Error('Failed to fetch deliveries');
+        let data = await res.json();
+        if (!data || !data.length) { list.innerHTML = '<li>No deliveries found.</li>'; return; }
+
+        // If a full box serial was provided, filter parcels to that box by normalizing serials
+        const serialDigits = String(serial || '').replace(/\D/g, '');
+        const serialNorm = serialDigits.replace(/^0+/, '') || serialDigits; // remove leading zeros
+        let filtered = data;
+        if (serialNorm) {
+          filtered = data.filter(d => {
+            const ps = String(d.serialNumber || d.serial || '').replace(/\D/g, '');
+            const pnorm = ps.replace(/^0+/, '') || ps;
+            return pnorm === serialNorm;
+          });
+        }
+
+        // Show only exact matches for this box serial; if none found, indicate empty
+        if (!filtered || !filtered.length) {
+          list.innerHTML = '<li>No deliveries found.</li>';
+          return;
+        }
+        list.innerHTML = filtered.map(d => {
+          let dateStr = 'unknown';
+          const dt = d.createdAt || d.date || null;
+          if (dt) {
+            const f = formatTimestamp(dt);
+            if (f) dateStr = f;
+          }
+          const uid = d.recipientId || d.recipient || d.userId || 'unknown';
+          return `<li><strong>${dateStr}</strong> — ${d.action || d.status || ''} <span style="color:#666;">(parcel id: ${d.id} | user: ${uid})</span></li>`;
+        }).join('');
+      } catch (e) {
+        list.innerHTML = `<li>Failed to load: ${e.message}</li>`;
+      }
+    }
+    function closeAllModals(){
+      document.getElementById('deliveriesModal').style.display='none';
+      document.getElementById('descriptionModal').style.display='none';
+      document.getElementById('locationModal').style.display='none';
+      document.getElementById('modalBackdrop').style.display='none';
+    }
+    // close when clicking on backdrop
+    document.addEventListener('click', function(e){
+      const backdrop = document.getElementById('modalBackdrop');
+      if (!backdrop) return;
+      if (e.target === backdrop) closeAllModals();
+    });
+
+    // Redirect to home if another tab signs out
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'signedOutAt') {
+        window.location.replace('/home');
+      }
+    });
+  </script>
+
+  <!-- Deliveries modal -->
+  <!-- Backdrop for modals -->
+  <div id="modalBackdrop" style="display:none; position:fixed; left:0; top:0; right:0; bottom:0; background:rgba(0,0,0,0.45); z-index:900;"></div>
+
+  <!-- Deliveries modal -->
+  <div id="deliveriesModal" class="modal" style="display:none; z-index:1000;">
+    <div class="modal-inner">
+      <div style="display:flex; justify-content:space-between; align-items:center;"><h3 id="deliveriesTitle">Deliveries</h3><button onclick="closeAllModals()">Close</button></div>
+      <div id="deliveriesContainer" style="background:#fafafa; border-radius:6px; padding:12px; margin-top:8px;">
+        <ul id="deliveriesList" style="list-style: none; margin:0; padding-left:12px; max-height:60vh; overflow:auto;"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Description modal -->
+  <div id="descriptionModal" class="modal" style="display:none; z-index:1001;">
+    <div class="modal-inner">
+      <div style="display:flex; justify-content:space-between; align-items:center;"><h3>Status Description</h3><button onclick="closeAllModals()">Close</button></div>
+      <div id="descriptionBody" style="margin-top:8px; white-space:pre-wrap; background:#fafafa; border-radius:6px; padding:12px; max-height:60vh; overflow:auto;"></div>
+    </div>
+  </div>
+
+  <style>
+    /* modal sizing and centering */
+    .modal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); width:min(900px,94%); }
+    .modal-inner { background: #ffffff; padding:18px; border-radius:10px; box-shadow:0 10px 40px rgba(0,0,0,0.35); }
+    /* deliveries list items */
+    #deliveriesList li { padding:8px 6px; border-bottom:1px solid #eee; }
+    #deliveriesList li strong { display:block; margin-bottom:4px; }
+
+    /* Location details modal */
+    #locationModal {
+      display: none;
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+      z-index: 1001;
+      width: min(400px, 90%);
+    }
+  </style>
+
+  <!-- Location details modal -->
+  <div id="locationModal" class="modal">
+    <div class="modal-inner">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3>Location Details</h3>
+        <button onclick="closeAllModals()">Close</button>
+      </div>
+      <div id="locationDetails" style="margin-top:12px;">
+        <p><strong>Address:</strong> <span id="locationAddress"></span></p>
+        <p><strong>Description:</strong> <span id="locationDescription"></span></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function showLocationDetails(address, description) {
+      const modal = document.getElementById('locationModal');
+      const addressSpan = document.getElementById('locationAddress');
+      const descSpan = document.getElementById('locationDescription');
+      
+      addressSpan.textContent = address || 'Not provided';
+      descSpan.textContent = description || 'Not provided';
+      
+      closeAllModals();
+      const backdrop = document.getElementById('modalBackdrop');
+      backdrop.style.display = 'block';
+      modal.style.display = 'block';
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+{
+  "name": "secure-courier-box",
+  "version": "1.0.0",
+  "description": "The **Smart Courier Box (SCB)** is a secure, semi-automated delivery system designed to prevent parcel theft and misplacement. It enables safe and convenient package deliveries that users can access at their convenience via a web interface.",
+  "main": "index.js",
+  "scripts": {
+    "devStart": "npm --prefix server run dev",
+    "start": "npm --prefix server start",
+    "build": "npm --prefix server start",
+    "install:server": "npm --prefix server install"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@emailjs/nodejs": "^5.0.2",
+    "browserify-shim": "^3.8.16",
+    "canvas": "^3.1.0",
+    "dotenv": "^16.5.0",
+    "ejs": "^3.1.10",
+    "express": "^5.1.0",
+    "firebase": "^11.8.0",
+    "firebase-admin": "^13.4.0",
+    "qrcode": "^1.5.4",
+    "save": "^2.9.0"
+  },
+  "devDependencies": {
+    "esmify": "^2.1.1",
+    "nodemon": "^3.1.10"
+  }
+}

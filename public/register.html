@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Smart Courier Box</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+
+    
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+
+
+    body.light-theme {
+      background:
+        radial-gradient(1200px circle at 85% 10%, rgba(255,255,255,.35) 0%, rgba(255,255,255,0) 40%),
+        linear-gradient(135deg, #dff8ff 0%, #afe9f5 40%, #6ed3e6 100%);
+      color: #223;
+    }
+    body.dark-theme {
+      background:
+        radial-gradient(900px circle at 15% 10%, rgba(255,255,255,.08) 0%, rgba(255,255,255,0) 35%),
+        linear-gradient(135deg, #101418 0%, #1e2a33 50%, #0f2530 100%);
+      color: #f0f0f0;
+    }
+
+    .navbar {
+      background-color: #ffffffee;
+      padding: 15px 30px;
+      display: flex; justify-content: space-between; align-items: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      backdrop-filter: blur(6px);
+    }
+    .navbar h1 { font-size: 26px; color: #007bff; }
+
+    .nav-right { display: flex; align-items: center; gap: 15px; }
+
+    .sign-in-button, .home-button {
+      cursor: pointer; font-weight: bold; color: #007bff; background: white;
+      border: 1px solid #007bff; padding: 8px 16px; border-radius: 6px; transition: .3s; text-decoration: none;
+    }
+    .sign-in-button:hover, .home-button:hover { background: #007bff; color: white; }
+
+    .avatar { font-weight: bold; color: green; }
+
+    .main-content {
+      flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
+      padding: 60px 30px; text-align: center; transition: filter .4s ease;
+    }
+    .main-content h2 { font-size: 36px; color: #004d40; margin-bottom: 10px; }
+    .main-content p { font-size: 20px; color: #333; max-width: 600px; }
+    body.dark-theme .main-content h2 { color: #e6f7ff; }
+    body.dark-theme .main-content p  { color: #e0e6eb; }
+
+    .modal-overlay {
+      position: fixed; inset: 0; display: none; justify-content: center; align-items: center;
+      background: rgba(0,0,0,.5); z-index: 999;
+    }
+    .modal {
+      background: white; padding: 30px; border-radius: 10px; width: 320px;
+      box-shadow: 0 5px 15px rgba(0,0,0,.3);
+    }
+
+    .form-group { margin-bottom: 15px; text-align: left; }
+    .form-group label { display: block; margin-bottom: 5px; font-weight: 500; }
+    .form-group input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+
+    .form-actions {
+      display: flex; justify-content: space-between; align-items: center; margin-top: 10px; gap: 8px;
+    }
+    .form-actions button {
+      padding: 8px 14px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;
+      background: #007bff; color: white; transition: background-color .3s ease;
+    }
+    .form-actions button:hover { background: #0056b3; }
+
+    .toggle-text { margin-top: 10px; font-size: 14px; text-align: center; }
+
+    .loading-spinner {
+      width: 20px; height: 20px; border: 3px solid #ccc; border-top: 3px solid #007bff; border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .blurred { filter: blur(4px); }
+
+    
+    .theme-toggle{
+      position: fixed; right: 20px; bottom: 20px; z-index: 1000;
+      background: #ffffffdd; border: 1px solid #007bff; border-radius: 999px;
+      padding: 6px; box-shadow: 0 2px 6px rgba(0,0,0,.2);
+      display: flex; align-items: center; gap: 6px; backdrop-filter: blur(6px);
+    }
+    .theme-toggle .chip{
+      border: none; padding: 8px 14px; border-radius: 999px; cursor: pointer; font-weight: 800;
+      background: transparent; color: #007bff; transition: .2s;
+    }
+    .theme-toggle .chip.active{ background: #007bff; color: #fff; }
+    body.dark-theme .theme-toggle{ background: #1f2a33dd; border-color: #4fb3ff; }
+    body.dark-theme .theme-toggle .chip{ color: #bfe6ff; }
+    body.dark-theme .theme-toggle .chip.active{ background: #4fb3ff; color: #04223a; }
+  </style>
+</head>
+<body class="light-theme">
+
+  <div class="navbar">
+    <h1>Smart Courier Box</h1>
+    <div class="nav-right">
+      <span id="signInBtn" class="sign-in-button">Sign In</span>
+      <span id="avatar" class="avatar" style="display:none;">
+        <a href="#" id="profileLink" style="text-decoration: none; color: green;">
+          👤 <span id="userEmailDisplay"></span>
+        </a> |
+        <a href="#" onclick="logout()">Logout</a>
+      </span>
+      <button class="home-button" onclick="home()">🏠 Home</button>
+    </div>
+  </div>
+
+  <div class="main-content" id="mainContent">
+    <h2>Welcome to the SCB home</h2>
+    <p>Fast, secure, and smart parcel delivery with our Smart Courier Box system.</p>
+  </div>
+
+
+  <div class="theme-toggle" role="group" aria-label="Theme switch">
+    <button id="themeLight" class="chip active" aria-pressed="true" type="button">Light</button>
+    <button id="themeDark"  class="chip" aria-pressed="false" type="button">Dark</button>
+  </div>
+
+  <!-- Login Modal -->
+  <div class="modal-overlay" id="loginModal">
+    <div class="modal">
+      <h2>Login</h2>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="username">Email:</label>
+          <input type="text" id="username" required />
+        </div>
+        <div class="form-group">
+          <label for="password">Password:</label>
+          <input type="password" id="password" required />
+        </div>
+        <div class="form-actions">
+          <button type="submit">Submit</button>
+          <div id="spinner" class="loading-spinner" style="display:none;"></div>
+          <button type="button" onclick="closeModal()">Cancel</button>
+        </div>
+        <p class="toggle-text">
+          Don't have an account? <a href="#" onclick="switchToRegister()">Register here</a>
+        </p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Register Modal -->
+  <div class="modal-overlay" id="registerModal">
+    <div class="modal">
+      <h2>Register</h2>
+      <form id="registerForm">
+        <div class="form-group">
+          <label for="regUsername">Email:</label>
+          <input type="text" id="regUsername" required />
+        </div>
+        <div class="form-group">
+          <label for="regPassword">Password:</label>
+          <input type="password" id="regPassword" required />
+        </div>
+        <div class="form-actions">
+          <button type="submit">Register</button>
+          <button type="button" onclick="closeRegister()">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script src="/auth.js"></script>
+  <script>
+    (async function(){
+      try{
+        const res = await fetch("/api/email-key", { method: 'POST' });
+        if (!res.ok) throw new Error(`Response status: ${res.status}`);
+        const result = await res.json();
+        emailjs.init(result.key);
+      } catch (error){
+        console.log(error);
+      }
+    })();
+  </script>
+
+  <script>
+/* ===== Helpers ===== */
+function isLoggedIn(){ return !!localStorage.getItem('uid'); }
+function currentUid(){ return localStorage.getItem('uid') || ''; }
+
+/* ===== Theme logic (with backend sync) ===== */
+async function saveThemeToProfile(theme){
+  if (!isLoggedIn() || !currentUid()) return;
+  try {
+    await SCBAuth.fetch(`/api/profile/${encodeURIComponent(currentUid())}`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ theme })
+    });
+  } catch(e){
+    console.log('Theme sync failed:', e);
+  }
+}
+
+function applyTheme(theme){
+  const t = (theme === 'dark') ? 'dark' : 'light';
+  document.body.classList.remove('light-theme','dark-theme');
+  document.body.classList.add(t + '-theme');
+
+  
+  const lightBtn = document.getElementById('themeLight');
+  const darkBtn  = document.getElementById('themeDark');
+  if (t === 'dark'){
+    lightBtn.classList.remove('active'); lightBtn.setAttribute('aria-pressed','false');
+    darkBtn.classList.add('active');     darkBtn.setAttribute('aria-pressed','true');
+  } else {
+    darkBtn.classList.remove('active');  darkBtn.setAttribute('aria-pressed','false');
+    lightBtn.classList.add('active');    lightBtn.setAttribute('aria-pressed','true');
+  }
+  
+  try { localStorage.setItem('theme', t); } catch(e){}
+  
+  saveThemeToProfile(t);
+}
+
+async function fetchAndApplyThemeFromProfile(){
+  if (!isLoggedIn() || !currentUid()) return null;
+  try{
+  const res = await SCBAuth.fetch(`/api/profile/${encodeURIComponent(currentUid())}`);
+    if (!res.ok) throw new Error('profile fetch failed');
+    const data = await res.json();
+    if (data && data.theme){
+      applyTheme(data.theme);
+      return data.theme;
+    }
+    return null;
+  }catch(e){
+    console.log('Fetch theme failed:', e);
+    return null;
+  }
+}
+
+async function harmonizeThemeWithBackend(){
+  
+  const serverTheme = await fetchAndApplyThemeFromProfile();
+  if (!serverTheme){
+    const localTheme = localStorage.getItem('theme') || 'light';
+    await saveThemeToProfile(localTheme);
+  }
+}
+
+
+(async function initTheme(){
+  const local = (localStorage.getItem('theme') === 'dark') ? 'dark' : 'light';
+  applyTheme(local);
+  
+  document.getElementById('themeLight').addEventListener('click', ()=>applyTheme('light'));
+  document.getElementById('themeDark').addEventListener('click',  ()=>applyTheme('dark'));
+  
+  try { if (window.SCBAuth && SCBAuth.ready) await SCBAuth.ready(); } catch(_) {}
+  if (isLoggedIn() && currentUid()){
+    fetchAndApplyThemeFromProfile();
+  }
+})();
+
+/* ===== Existing auth/UI logic ===== */
+const signInBtn = document.getElementById('signInBtn');
+const avatar = document.getElementById('avatar');
+const loginModal = document.getElementById('loginModal');
+const registerModal = document.getElementById('registerModal');
+const spinner = document.getElementById('spinner');
+const mainContent = document.getElementById('mainContent');
+
+async function home() {
+  try { if (window.SCBAuth && SCBAuth.ready) await SCBAuth.ready(); } catch(_){}
+  if(currentUid()) window.location.pathname = "/profile";
+  else alert("Please sign in");
+}
+
+signInBtn.onclick = () => {
+  loginModal.style.display = 'flex';
+  mainContent.classList.add('blurred');
+};
+
+function closeModal() {
+  loginModal.style.display = 'none';
+  mainContent.classList.remove('blurred');
+}
+
+function switchToRegister() {
+  loginModal.style.display = 'none';
+  registerModal.style.display = 'flex';
+}
+
+function closeRegister() {
+  registerModal.style.display = 'none';
+  loginModal.style.display = 'flex';
+}
+
+async function logout() {
+  try { await SCBAuth.signOut(); } catch (e) { console.warn(e); }
+  updateUI(false);
+  try { localStorage.setItem('signedOutAt', Date.now().toString()); } catch(e){}
+}
+
+function updateUI(loggedIn, userEmail = '') {
+  signInBtn.style.display = loggedIn ? 'none' : 'inline-block';
+  avatar.style.display = loggedIn ? 'inline-block' : 'none';
+  document.getElementById("userEmailDisplay").textContent = loggedIn ? userEmail : '';
+}
+
+document.getElementById('loginForm').onsubmit = async function (e) {
+  e.preventDefault();
+  spinner.style.display = 'inline-block';
+  const email = document.getElementById('username').value;
+  const password = document.getElementById('password').value;
+  try {
+  const result = await SCBAuth.signIn(email, password);
+  closeModal();
+  updateUI(true, result.email);
+  harmonizeThemeWithBackend();
+  } catch (err) {
+  alert(err && err.message ? err.message : 'Login failed');
+  } finally {
+    spinner.style.display = 'none';
+  }
+};
+
+async function genInitQRCode(email) {
+  var passcode = "https://smart-courier-box.vercel.app/qr?c=" + btoa(email);
+  var params = { email: email, passcode: passcode };
+  try {
+    await emailjs.send("service_agd4kkq","template_z6zcllo", params);
+  } catch (error) {
+    console.log('FAILED...', error);
+  }
+}
+
+document.getElementById('registerForm').onsubmit = async function (e) {
+  e.preventDefault();
+  const email = document.getElementById('regUsername').value;
+  const password = document.getElementById('regPassword').value;
+  try {
+    const result = await SCBAuth.signUp(email, password);
+    if (result && result.success) {
+      try {
+        // auto sign-in after signup for smoother UX
+        await SCBAuth.signIn(email, password);
+      } catch (_) {}
+      localStorage.setItem('uid', result.uid || '');
+      await genInitQRCode(email);
+      closeRegister();
+      alert('Registered successfully! Please check your email.');
+    } else {
+      alert('Registration failed');
+    }
+  } catch (err) {
+    alert(err && err.message ? err.message : 'Registration failed');
+  }
+};
+
+const initUid = localStorage.getItem('uid');
+if (initUid) updateUI(true, (localStorage.getItem('email') || initUid)); else updateUI(false);
+
+
+window.addEventListener('storage', (e) => {
+  if (e.key === 'signedOutAt') {
+    updateUI(false);
+  }
+});
+  </script>
+</body>
+</html>

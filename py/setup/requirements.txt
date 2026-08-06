@@ -1,0 +1,8 @@
+opencv-python
+Pillow
+qrcode[pil]
+pyzbar
+gpiozero
+RPi.GPIO
+luma.oled
+adafruit-circuitpython-ssd1306

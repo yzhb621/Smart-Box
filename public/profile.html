@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Smart Courier Box - Profile</title>
+  <style>
+    :root {
+      --primary: #007bff;
+      --primary-contrast: #ffffff;
+      --card-bg-light: rgba(255, 255, 255, 0.22);
+      --card-border-light: rgba(0, 123, 255, 0.25);
+      --card-bg-dark: rgba(16, 20, 24, 0.48);
+      --card-border-dark: rgba(79, 179, 255, 0.35);
+      --input-bg-light: #ffffff;
+      --input-border-light: #cfd8dc;
+      --input-text-light: #1b1f23;
+      --input-bg-dark: #24313a;
+      --input-border-dark: #445764;
+      --input-text-dark: #f1f5f9;
+      --shadow-lg: 0 10px 25px rgba(0,0,0,.18);
+      --shadow-sm: 0 2px 6px rgba(0,0,0,.12);
+      --radius-lg: 14px;
+      --radius-md: 10px;
+      --radius-sm: 8px;
+      --focus-ring: 0 0 0 3px rgba(0,123,255,.28);
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+
+    body.light-theme{
+      background:
+        radial-gradient(1200px circle at 85% 10%, rgba(255,255,255,.35) 0%, rgba(255,255,255,0) 40%),
+        linear-gradient(135deg, #dff8ff 0%, #afe9f5 40%, #6ed3e6 100%);
+      color:#223;
+      min-height:100vh; display:flex; flex-direction:column;
+    }
+    body.dark-theme{
+      background:
+        radial-gradient(900px circle at 15% 10%, rgba(255,255,255,.08) 0%, rgba(255,255,255,0) 35%),
+        linear-gradient(135deg, #101418 0%, #1e2a33 50%, #0f2530 100%);
+      color:#f0f0f0;
+      min-height:100vh; display:flex; flex-direction:column;
+    }
+
+    /* ========== Navbar ========== */
+    .navbar{
+      background:#ffffffee;
+      padding:15px 30px;
+      display:flex; justify-content:space-between; align-items:center;
+      box-shadow:var(--shadow-sm);
+      backdrop-filter: blur(6px);
+    }
+    .nav-left{ display:flex; align-items:center; gap:12px; }
+    .navbar h1{ font-size:26px; color:var(--primary); margin:0; }
+    .nav-right{ display:flex; align-items:center; gap:12px; }
+    .home-button, .nav-button{
+      cursor:pointer; font-weight:600; color:var(--primary); background:#fff;
+      border:1px solid var(--primary); padding:8px 16px; border-radius:var(--radius-sm); transition:.25s;
+    }
+    .home-button:hover, .nav-button:hover{ background:var(--primary); color:#fff; }
+    .avatar{ font-weight:700; color:green; white-space:nowrap; }
+
+    /* ========== Layout Container ========== */
+    .main{ width:100%; padding: 28px 18px 60px; }
+
+    /* ========== Profile Card ========== */
+    .profile-box{
+      max-width: 720px; margin: 32px auto;
+      backdrop-filter: blur(10px);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      padding: 28px;
+      border: 1px solid transparent;
+    }
+    .light-theme .profile-box{ background: var(--card-bg-light); border-color: var(--card-border-light); }
+    .dark-theme .profile-box{ background: var(--card-bg-dark); border-color: var(--card-border-dark); }
+    .profile-box h2{ margin-bottom:6px; font-size: 24px; }
+    .subtitle{ opacity:.85; font-size:14px; margin-bottom:14px; }
+
+    /* ========== Form ========== */
+    .profile-item{ margin:18px 0; }
+    label{ display:block; margin-bottom:8px; font-weight:700; }
+    input, select{
+      width:100%; padding:12px 14px; border-radius: var(--radius-md);
+      border:1px solid; outline:none; transition:.15s;
+    }
+    .light-theme input, .light-theme select{
+      background: var(--input-bg-light);
+      border-color: var(--input-border-light);
+      color: var(--input-text-light);
+    }
+    .dark-theme input, .dark-theme select{
+      background: var(--input-bg-dark);
+      border-color: var(--input-border-dark);
+      color: var(--input-text-dark);
+    }
+
+    input:focus, select:focus{ border-color: var(--primary); box-shadow: var(--focus-ring); }
+
+    /* ========== Buttons Row ========== */
+    .btns{ margin-top: 22px; display:flex; gap:12px; }
+    .btn{
+      padding:10px 16px; border:none; border-radius: var(--radius-md);
+      cursor:pointer; font-weight:700; transition:.2s;
+    }
+    .btn:active{ transform: translateY(1px) scale(.99); }
+    .btn-primary{ background:#fff; color:var(--primary); border:1px solid var(--primary); }
+    .btn-primary:hover{ background:var(--primary); color:#fff; }
+    .btn-secondary{ background: rgba(255,255,255,.9); color:#333; }
+    .dark-theme .btn-secondary{ background: rgba(255,255,255,.12); color:#e2e8f0; border:1px solid rgba(79,179,255,.35); }
+    .btn-secondary:hover{ opacity:.9; }
+
+    /* ========== Theme Toggle ========== */
+    .theme-toggle{
+      position:fixed; right:20px; bottom:20px; z-index:999;
+      background:#ffffffdd; border:1px solid var(--primary); border-radius:999px;
+      padding:6px; box-shadow:var(--shadow-sm);
+      display:flex; align-items:center; gap:6px; backdrop-filter: blur(6px);
+    }
+    .chip{ border:none; padding:8px 14px; border-radius:999px; cursor:pointer; font-weight:800;
+      background:transparent; color:var(--primary); transition:.2s; }
+    .chip.active{ background:var(--primary); color:var(--primary-contrast); }
+    .dark-theme .theme-toggle{ background:#1f2a33dd; border-color:#4fb3ff; }
+    .dark-theme .chip{ color:#bfe6ff; }
+    .dark-theme .chip.active{ background:#4fb3ff; color:#04223a; }
+
+    @media (max-width: 420px) {
+      .navbar { padding:12px 16px; flex-wrap:wrap; }
+      .home-button { padding:6px 12px; }
+      .profile-box { padding:20px; margin:20px auto; }
+    }
+  </style>
+</head>
+<body class="light-theme">
+  <script src="/auth.js"></script>
+  <!-- Navbar -->
+  <div class="navbar">
+    <div class="nav-left">
+      <h1>Smart Courier Box</h1>
+      <button id="adminButton" class="nav-button" style="display:none" onclick="window.location.href='/admin'">Admin Panel</button>
+      <button class="nav-button" onclick="window.location.href='/history'">View History</button>
+    </div>
+    <div class="nav-right">
+  <span class="avatar">👤 <span id="userEmailDisplay"></span></span>
+      <button class="home-button" onclick="home()">🏠 Home</button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <main class="main">
+    <section class="profile-box" aria-label="Profile">
+      <h2>Profile</h2>
+      <p class="subtitle">Edit your personal information and preferences.</p>
+
+      <div class="profile-item">
+        <label for="userName">Name</label>
+        <input id="userName" type="text" placeholder="Your name"/>
+      </div>
+
+      <div class="profile-item">
+        <label for="userAddress">Address</label>
+        <input id="userAddress" type="text" placeholder="Shipping / Home address"/>
+      </div>
+
+      <div class="profile-item">
+        <label for="userPhone">Phone</label>
+        <input id="userPhone" type="text" placeholder="Phone number"/>
+      </div>
+
+      <div class="profile-item">
+        <label for="notifSelect">Notifications</label>
+        <select id="notifSelect">
+          <option value="enabled">Enabled</option>
+          <option value="disabled">Disabled</option>
+        </select>
+      </div>
+
+      <div class="btns">
+        <button class="btn btn-primary" onclick="save()">Save</button>
+        <button class="btn btn-secondary" onclick="window.history.back()">Back</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Theme Switch -->
+  <div class="theme-toggle" role="group" aria-label="Theme switch">
+    <button id="themeLight" class="chip active" type="button">Light</button>
+    <button id="themeDark" class="chip" type="button">Dark</button>
+  </div>
+
+  <script>
+  function home(){ window.location.href='/home'; }
+  function getUserId(){ return localStorage.getItem('uid') || ''; }
+  function getUserEmail(){ return (localStorage.getItem('email') || (window.SCBAuth && SCBAuth.getEmailSync && SCBAuth.getEmailSync()) || '').trim(); }
+  function setNavbarEmail(email){ document.getElementById('userEmailDisplay').textContent = (email || ''); }
+
+    let currentTheme = 'light';
+    function applyTheme(theme){
+      document.body.classList.remove('light-theme','dark-theme');
+      currentTheme = (theme === 'dark') ? 'dark' : 'light';
+      document.body.classList.add(currentTheme + '-theme');
+
+      const lightBtn = document.getElementById('themeLight');
+      const darkBtn  = document.getElementById('themeDark');
+      if (currentTheme === 'dark'){
+        lightBtn.classList.remove('active'); lightBtn.setAttribute('aria-pressed','false');
+        darkBtn.classList.add('active');     darkBtn.setAttribute('aria-pressed','true');
+      } else {
+        darkBtn.classList.remove('active');  darkBtn.setAttribute('aria-pressed','false');
+        lightBtn.classList.add('active');    lightBtn.setAttribute('aria-pressed','true');
+      }
+    }
+
+    async function loadProfileFromServer(){
+  setNavbarEmail(getUserEmail());
+      try{
+  const uid = getUserId();
+        if (!uid) throw new Error('Not signed in');
+        const res = await SCBAuth.fetch(`/api/profile/${encodeURIComponent(uid)}`);
+        if(!res.ok) throw new Error('Failed to fetch profile');
+        const data = await res.json();
+
+        if (data?.role === 'admin') document.getElementById('adminButton').style.display = '';
+        if (data?.name)    document.getElementById('userName').value = data.name;
+        if (data?.address) document.getElementById('userAddress').value = data.address;
+        if (data?.phone)   document.getElementById('userPhone').value = data.phone;
+        if (typeof data?.notifications !== 'undefined'){
+          document.getElementById('notifSelect').value = data.notifications ? 'enabled' : 'disabled';
+        }
+        applyTheme(data?.theme || 'light');
+      }catch(e){
+        console.error('Failed to load profile:', e);
+        applyTheme('light');
+      }
+    }
+
+    async function save(){
+      const info = {
+        name: document.getElementById('userName').value.trim(),
+        address: document.getElementById('userAddress').value.trim(),
+        phone: document.getElementById('userPhone').value.trim(),
+        theme: currentTheme,
+        notifications: document.getElementById('notifSelect').value === 'enabled'
+      };
+      try{
+  const uid = getUserId();
+        if (!uid) throw new Error('Not signed in');
+        const res = await SCBAuth.fetch(`/api/profile/${encodeURIComponent(uid)}`, {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body:JSON.stringify(info)
+        });
+        if(!res.ok) throw new Error('Save failed');
+        alert('Profile saved successfully.');
+      }catch(e){
+        alert('Save failed: ' + e.message);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', async ()=>{
+      try { if (window.SCBAuth && SCBAuth.ready) await SCBAuth.ready(); } catch(_) {}
+  setNavbarEmail(getUserEmail());
+      await loadProfileFromServer();
+      document.getElementById('themeLight').addEventListener('click', ()=>applyTheme('light'));
+      document.getElementById('themeDark').addEventListener('click',  ()=>applyTheme('dark'));
+    });
+  </script>
+</body>
+</html>

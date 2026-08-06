@@ -1,0 +1,27 @@
+{
+  "name": "secure-courier-box-server",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node ./src/index.js",
+    "dev": "nodemon ./src/index.js",
+    "test": "jest --passWithNoTests"
+  },
+  "dependencies": {
+    "@emailjs/nodejs": "^5.0.2",
+    "canvas": "^3.1.0",
+    "dotenv": "^16.5.0",
+    "ejs": "^3.1.10",
+    "express": "^5.1.0",
+    "firebase": "^11.8.0",
+    "firebase-admin": "^13.4.0",
+    "qrcode": "^1.5.4",
+    "secure-courier-box": "file:..",
+    "serverless-http": "^3.2.0"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0",
+    "nodemon": "^3.1.10",
+    "supertest": "^6.0.0"
+  }
+}

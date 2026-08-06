@@ -1,0 +1,8 @@
+{
+  "name": "scb-sim",
+  "version": "1.0.0",
+  "description": "Simulator for Smart Courier Box",
+  "scripts": {
+    "start": "serve public || npx http-server public"
+  }
+}

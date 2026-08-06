@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;">
+        <p style="font-size: 1.5rem; margin-bottom: 1.5rem;" id="message">This page is empty</p>
+        <canvas id="display" width="200" height="200"></canvas>
+        <a href="./home" style="margin: 10px; padding: 0.75rem 1.5rem; background-color: #3599dc; color: #fff; border: none; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; cursor: pointer;">
+            Return to homeeee
+        </a>
+
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <script>
+
+        // Parse URL parameters and log them as an object
+        const params = new URLSearchParams(window.location.search);
+        var code;
+
+        if(params.has("c")) {
+            code = params.get("c");
+            document.getElementById('message').textContent = "QR Key Code";
+        }
+        else document.getElementById("display").style.display = "none";
+
+        var keyCanvas = document.getElementById("display");
+
+        QRCode.toCanvas(keyCanvas, code, function (error) {
+            if (error) console.error(error)
+        })
+        
+    </script>
+</body>
+</html>
