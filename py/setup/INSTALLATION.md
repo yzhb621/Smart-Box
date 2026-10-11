@@ -12,7 +12,7 @@ Prerequisites
 Quick setup (automated)
 -----------------------
 1. Place this project on the Pi and cd into the repository root.
-2. Run the setup script from the repo root (it will create a venv inside `py/`):
+2. Run the setup script from the `py/` directory (it creates `py/venv`):
 
    cd py
    sudo bash setup/setup_pi.sh

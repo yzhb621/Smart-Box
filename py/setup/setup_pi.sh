@@ -47,7 +47,7 @@ echo "--- Activating venv and installing Python packages ---"
 source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip setuptools wheel
 
-REQ_FILE="requirements.txt"
+REQ_FILE="setup/requirements.txt"
 if [ -f "$REQ_FILE" ]; then
   pip install -r "$REQ_FILE"
 else
