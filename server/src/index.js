@@ -1,6 +1,4 @@
 require('dotenv').config();
-const firebase = require('firebase/compat/app');
-require('firebase/compat/auth');
 const express = require('express');
 const app = express();
 const path = require('path');
@@ -10,21 +8,6 @@ const admin = require('./config/firebaseAdmin');
 const db = admin.firestore();
 const { authenticateFirebase, requireRole } = require('./middleware/auth');
 
-const firebaseConfig = {
-    apiKey: process.env.API_KEY,
-    authDomain: process.env.AUTH_DOMAIN,
-    projectId: process.env.PROJECT_ID,
-    storageBucket: process.env.STORAGE_BUCKET,
-    messagingSenderId: process.env.MESSAGING_SENDER_ID,
-    appId: process.env.APP_ID,
-    measurementId: process.env.MEASUREMENT_ID
-};
-// Note: client will handle auth; server no longer uses client SDK for login
-if (process.env.NODE_ENV !== 'test') {
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-    }
-}
 
 const port = process.env.PORT || 8080;
 
@@ -72,7 +55,7 @@ app.get("/qr", (req, res) =>{
 })
 
 app.get("/data", (req, res) =>{
-    res.sendFile(path.join(publicDir, "data.html"));
+    res.redirect('/history');
 
 })
 
@@ -87,8 +70,13 @@ app.get('/health', (req, res) => {
 });
 
 app.post("/api/email-key", (req, res) =>{
-    res.json({key: process.env.PUBLICKEY});
+    res.json({key: process.env.PUBLICKEY || null,
+        serviceId: process.env.EMAILJS_SERVICE_ID || null,
+        pickupTemplateId: process.env.EMAILJS_PICKUP_TEMPLATE_ID || null,
+        registrationTemplateId: process.env.EMAILJS_REGISTRATION_TEMPLATE_ID || null});
 });
+
+app.use('/simulator', express.static(path.join(__dirname, '..', '..', 'sim', 'public'), { index: 'sim.html' }));
 
 // Public Firebase config for client SDK initialization
 app.get('/api/firebase-config', (req, res) => {
@@ -122,13 +110,13 @@ app.get('/api/profile/:email', authenticateFirebase, async (req, res) => {
         if (!userDoc) return res.json({});
         const uid = userDoc.id;
         const profile = userDoc.data();
+        if (req.user && req.user.claims.role === 'courier') {
+            return res.json({ uid, email: profile.email });
+        }
         // Authorization: if user present and not admin, limit to self
         if (req.user && req.user.claims && req.user.claims.role !== 'admin') {
             const authedEmail = req.user.email || null;
-            if (authedEmail && profile && profile.email && authedEmail !== profile.email) {
-                return res.status(403).json({ error: 'Forbidden' });
-            }
-            if (!authedEmail && req.user.uid !== uid) {
+            if (req.user.uid !== uid) {
                 return res.status(403).json({ error: 'Forbidden' });
             }
         }
@@ -169,13 +157,19 @@ app.post('/api/profile/:email', authenticateFirebase, async (req, res) => {
             const asUid = await usersRef.doc(param).get();
             if (asUid.exists) uid = asUid.id;
         }
+        if (!uid && req.user && req.user.uid === param) uid = param;
         if (!uid) return res.status(404).json({ error: 'User not found' });
         // Authorization: only self or admin
         if (req.user && req.user.claims && req.user.claims.role !== 'admin' && req.user.uid !== uid) {
             return res.status(403).json({ error: 'Forbidden' });
         }
+        const { profileUpdates } = require('./utils/validators');
+        const updates = profileUpdates(req.body);
+        if (!updates) return res.status(400).json({ error: 'Invalid profile fields' });
         await db.collection('users').doc(uid).set({
-            ...req.body,
+            ...updates,
+            uid,
+            ...(req.user && req.user.uid === uid ? { email: req.user.email } : {}),
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
         res.json({ success: true });
@@ -255,54 +249,9 @@ app.post('/api/history/:email', authenticateFirebase, async (req, res) => {
             return res.status(403).json({ error: 'Forbidden' });
         }
         await db.collection('parcels').add({
-            ...req.body,
+            action: typeof req.body.action === 'string' ? req.body.action.slice(0, 500) : '',
+            status: 'note',
             recipientId: uid,
-            date: admin.firestore.FieldValue.serverTimestamp()
-        });
-        res.json({ success: true });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// Update user profile by uid
-app.post('/api/profile/:uid', authenticateFirebase, async (req, res) => {
-    try {
-        if (req.user && req.user.claims && req.user.claims.role !== 'admin' && req.user.uid !== req.params.uid) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
-        await db.collection('users').doc(req.params.uid).set({
-            ...req.body,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-        res.json({ success: true });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// Get user history by uid
-app.get('/api/history/:uid', authenticateFirebase, async (req, res) => {
-    try {
-        if (req.user && req.user.claims && req.user.claims.role !== 'admin' && req.user.uid !== req.params.uid) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
-        const snap = await db.collection('users').doc(req.params.uid).collection('history').orderBy('date', 'desc').get();
-        const data = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        res.json(data);
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// Add history entry by uid
-app.post('/api/history/:uid', authenticateFirebase, async (req, res) => {
-    try {
-        if (req.user && req.user.claims && req.user.claims.role !== 'admin' && req.user.uid !== req.params.uid) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
-        await db.collection('users').doc(req.params.uid).collection('history').add({
-            action: req.body.action,
             date: admin.firestore.FieldValue.serverTimestamp()
         });
         res.json({ success: true });
@@ -322,7 +271,8 @@ app.post('/api/parcels', authenticateFirebase, async (req, res) => {
             qrKeyId, 
             recipientId, 
             retrievedAt, 
-            status, 
+            status,
+            areaId,
             postCode, 
             serialNumber 
         } = req.body;
@@ -343,19 +293,29 @@ app.post('/api/parcels', authenticateFirebase, async (req, res) => {
             }
         }
 
-        await db.collection('parcels').add({
-            courierId,
-            createdAt: createdAt === 'FIREBASE_TIMESTAMP' ? admin.firestore.FieldValue.serverTimestamp() : createdAt,
-            deliveredAt: deliveredAt === 'FIREBASE_TIMESTAMP' ? admin.firestore.FieldValue.serverTimestamp() : deliveredAt,
-            deliveryAddress,
+        if (!recipientId || !finalSerial || !qrKeyId) {
+            return res.status(400).json({ error: 'Recipient, serial number and pickup code are required' });
+        }
+        if (!/^\d{4}$/.test(String(postCode || '')) || !/^\d{12}$/.test(finalSerial) || !/^\d{6}$/.test(Buffer.from(String(qrKeyId), 'base64').toString('utf8'))) return res.status(400).json({ error: 'Invalid postcode, serial or pickup code' });
+        const recipient = await db.collection('users').doc(String(recipientId)).get();
+        if (!recipient.exists) return res.status(404).json({ error: 'Recipient not found' });
+        if (req.user && req.user.uid !== recipientId && !['admin', 'courier'].includes(req.user.claims.role)) {
+            return res.status(403).json({ error: 'Courier role required for another recipient' });
+        }
+        const parcel = await db.collection('parcels').add({
+            courierId: req.user.uid,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            deliveredAt: admin.firestore.FieldValue.serverTimestamp(),
+            deliveryAddress: deliveryAddress || null,
             qrKeyId,
             recipientId,
-            retrievedAt,
-            status,
-            postCode,
+            retrievedAt: null,
+            status: status || 'delivered',
+            areaId: areaId || null,
+            postCode: postCode || null,
             serialNumber: finalSerial
         });
-        res.json({ success: true });
+        res.json({ success: true, id: parcel.id });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -552,6 +512,10 @@ app.get('/api/parcels', authenticateFirebase, async (req, res) => {
         const postCode = req.query.postCode;
         const serialQuery = req.query.serial;
         let parcelsRef = db.collection('parcels');
+        if (req.user && !['admin', 'courier'].includes(req.user.claims.role)) {
+            parcelsRef = parcelsRef.where('recipientId', '==', req.user.uid);
+        }
+        if (req.query.areaId) parcelsRef = parcelsRef.where('areaId', '==', String(req.query.areaId));
         
         // If serial query provided, normalize it to stored serial format
         if (serialQuery) {

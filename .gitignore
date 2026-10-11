@@ -29,3 +29,7 @@ Thumbs.db
 *.bak
 *.orig
 .vercel
+
+__pycache__/
+*.pyc
+py/venv/

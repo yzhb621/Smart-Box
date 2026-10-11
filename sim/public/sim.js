@@ -6,8 +6,8 @@ const SystemState = {
   OPENED: 'opened'
 };
 
-const areaID = "0000";
-const serID = 4;
+const areaID = window.SCBConfig.postCode;
+const serID = window.SCBConfig.serial;
 
 let currentState = SystemState.READY;
 let generatedCode = null;
@@ -24,7 +24,7 @@ const qrCanvas = document.getElementById('qrCanvas');
 const boxImage = document.getElementById('boxImage');
 const unlockSound = document.getElementById('unlockSound');
 const lockSound = document.getElementById('lockSound');
-const MASTER_CODE = "8080";
+let codeExpiresAt = 0;
 
 function initScanner() {
   html5QrcodeScanner = new Html5QrcodeScanner("scannerView", {
@@ -42,7 +42,9 @@ function isValidEmail(email) {
 }
 
 function generatePickupCode() {
-  return Math.floor(1000 + Math.random() * 9000).toString();
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  return (100000 + bytes[0] % 900000).toString();
 }
 
 function updateSystemState(newState) {
@@ -91,7 +93,7 @@ function updateSystemState(newState) {
       scanPickupBtn.disabled = true;
       resetBtn.disabled = false;
       boxImage.src = "images/open.png";
-      unlockSound.play();
+      unlockSound.play().catch(() => {});
       setTimeout(resetSystem, 3000);
       break;
   }
@@ -101,11 +103,14 @@ async function onScanSuccess(decodedText) {
   if (currentState === SystemState.SCANNING_EMAIL) {
     if (isValidEmail(decodedText)) {
       generatedCode = generatePickupCode();
-      QRCode.toCanvas(qrCanvas, "https://smart-courier-box.vercel.app/p?e=" + decodedText + "&c=" + btoa(generatedCode) + "&a=" + btoa(areaID) + "&s=" + btoa(serID), {
+      codeExpiresAt = Date.now() + window.SCBConfig.codeLifetimeMs;
+      const deliveryUrl = new URL("/p", window.SCBConfig.baseUrl);
+      deliveryUrl.search = new URLSearchParams({e:decodedText,c:btoa(generatedCode),a:btoa(areaID),s:btoa(serID)}).toString();
+      await QRCode.toCanvas(qrCanvas, deliveryUrl.href, {
         width: 180, margin: 2
       });
       updateSystemState(SystemState.CODE_GENERATED);
-      html5QrcodeScanner.clear();
+      await html5QrcodeScanner.clear().catch(() => {});
       scannerView.innerHTML = '<p>Wait for the pickup code to be scanned</p>';
     } else {
       scannerMessage.textContent = "Invalid email QR code, try again";
@@ -113,7 +118,7 @@ async function onScanSuccess(decodedText) {
   } else if (currentState === SystemState.SCANNING_PICKUP_CODE) {
     try {
       const decoded = atob(decodedText);
-      if (decoded === generatedCode || decoded === MASTER_CODE) {
+      if (generatedCode && decoded === generatedCode && Date.now() < codeExpiresAt) {
         html5QrcodeScanner.clear();
         updateSystemState(SystemState.OPENED);
       } else {
@@ -123,7 +128,9 @@ async function onScanSuccess(decodedText) {
   }
 }
 
-function resetSystem() {
+async function resetSystem() {
+  generatedCode = null;
+  codeExpiresAt = 0;
   if (html5QrcodeScanner) html5QrcodeScanner.clear();
   scannerView.innerHTML = '<p>Click “Start Delivery” to begin.</p>';
   updateSystemState(SystemState.READY);

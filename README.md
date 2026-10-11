@@ -10,7 +10,7 @@ A team project exploring secure parcel delivery through a web application, a bro
 - QR-based pickup page and browser delivery simulator.
 - Python camera, QR scanning, button and actuator controller.
 
-This repository is a prototype. Hardware, cloud configuration and end-to-end delivery must be verified in the target environment before production use. The simulator and Pi controller currently contain a fixed pickup URL; update it for your deployment.
+This repository is a prototype. Hardware, cloud configuration and end-to-end delivery must be verified in the target environment before production use. Configure the simulator and Raspberry Pi URLs for your deployment.
 
 ## Architecture
 
@@ -50,7 +50,7 @@ Use Node.js 22 or later with npm.
 4. Install and start the server:
 
 ```sh
-npm --prefix server install
+npm ci
 npm start
 ```
 
@@ -58,7 +58,7 @@ Open `http://localhost:8080`. The default page is `register.html`. Available pag
 
 The service account must belong to the same Firebase project as the web app. Keep its private key on the server. Admin-only operations require an appropriate role. Never include real service account files in commits.
 
-Without Firebase Admin credentials the current implementation falls back to a mock database. This can serve pages but is not a functioning cloud deployment.
+Startup now fails clearly if Firebase Admin credentials are missing. Tests use an isolated mock; do not run a deployment with NODE_ENV=test.
 
 ## Checks
 
@@ -67,11 +67,11 @@ npm run build
 npm test
 ```
 
-`build` checks server entry point syntax; this project has no frontend bundling step. Jest tests use mocked Firebase and bypass authentication in test mode. They do not prove production authorization or hardware behaviour. Never deploy with `NODE_ENV=test`.
+`build` checks server, browser, simulator and inline JavaScript syntax; this project has no frontend bundling step. Jest tests use mocked Firebase token verification and database responses while exercising the real authentication middleware. They do not prove live Firebase or hardware behaviour. Never deploy with `NODE_ENV=test`.
 
 ## Browser simulator
 
-Serve `sim/public/` with a static web server and open `sim.html`. This is separate from the main Express app. Review the pickup URL in `sim/public/sim.js` before using a different deployment.
+Open `/simulator/` on the Express server. Update `sim/public/config.js` to set the deployment origin, four-digit postcode, box serial and code lifetime. Camera access requires localhost or HTTPS and browser permission.
 
 ## Raspberry Pi
 
@@ -81,16 +81,28 @@ See [installation instructions](py/setup/INSTALLATION.md). Review wiring and act
 
 The actual serverless entry point is `api/index.js`. `vercel.json` routes requests to that handler, and Express serves the files under `public/`.
 
-Configure the variables from `.env.example` in Vercel. The handler requires the dependencies declared in `server/package.json`; validate dependency installation and file inclusion in a preview deployment before production rollout. Use the same Firebase project for the browser and server. Do not rely on the mock fallback in a deployed environment.
+Configure the variables from `.env.example` in Vercel. Root production dependencies include Express and Firebase Admin. `npm ci` uses the committed root lockfile. Validate file inclusion and environment variables in a preview deployment before production rollout. Use the same Firebase project for the browser and server. Missing credentials stop startup rather than silently using an empty database.
 
 ## Known limitations
 
 - Email notifications and cloud-to-hardware integration need end-to-end verification.
-- The `/data` route references a page that is not included in this repository.
-- Legacy profile/history routes overlap; API consolidation remains future work.
+- `/data` redirects to `/history`.
+- Profile/history identifiers accept either UID or email through one canonical handler.
 - Pickup URLs use Base64 encoding, which is not encryption or proof of authorization.
-- Native `canvas` remains a declared dependency and may require platform libraries at installation time.
+- Browser email sending uses EmailJS templates; configure PUBLICKEY, EMAILJS_SERVICE_ID, EMAILJS_PICKUP_TEMPLATE_ID and EMAILJS_REGISTRATION_TEMPLATE_ID.
 
 ## Original team credits
 
 Riley Baxter, Xu Zhang, Peiyuan Li, Troy Meredith, Marlon Gao and Jiahe Teng.
+
+## Delivery workflow and roles
+
+Register or sign in, scan the recipient email QR in the simulator or device, and open the generated delivery link. Sign in as the recipient or an authorised courier and confirm. The app saves the parcel first and sends the pickup email afterwards. If email sending fails, retry on the same page without creating another record. Reloading the page does not preserve that retry state.
+
+Provision admin or courier roles through trusted Firebase custom claims or the Firestore users document. Profile edits cannot change roles or account identity. Ordinary users can view their own parcel records; couriers can look up only the recipient UID/email.
+
+Simulator and device pickup codes are six random digits, expire after ten minutes, and have no universal master code. The current device flow verifies the locally generated code; it does not synchronise pickup completion to Firestore. Treat this as a prototype, not a production smart-lock security design.
+
+## Verification
+
+GitHub Actions installs from the lockfile, checks JavaScript syntax, runs API tests and compiles the Python controller. Hardware testing and real cloud/email verification remain separate deployment checks. See [deployment checklist](docs/DEPLOYMENT.md).

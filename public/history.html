@@ -113,7 +113,8 @@
   </style>
 </head>
 <body class="light-theme">
-  <script src="/auth.js"></script>
+  <script src="/shared.js"></script>
+<script src="/auth.js"></script>
 
   <!-- Navbar -->
   <div class="navbar">
@@ -293,8 +294,8 @@
           const ms = tsToMs(d.createdAt) || tsToMs(d.date) || Date.now();
           const dateStr = new Date(ms).toLocaleString();
           const areaLoc = d.areaName
-            ? `<div style="margin-top:4px;font-size:13px;">${d.areaName}</div>`
-            : (d.areaId ? `<div style="margin-top:4px;font-size:13px;">Area ID: ${d.areaId}</div>` : '');
+            ? `<div style="margin-top:4px;font-size:13px;">${SCB.escape(d.areaName)}</div>`
+            : (d.areaId ? `<div style="margin-top:4px;font-size:13px;">Area ID: ${SCB.escape(d.areaId)}</div>` : '');
 
           let serialDisplay = '';
           if (d.serialNumber) {
@@ -305,12 +306,12 @@
           }
 
           const qrLink = d.qrKeyId
-            ? `<a href="https://smart-courier-box.vercel.app/qr?c=${d.qrKeyId}" target="_blank">${d.qrKeyId}</a>`
+            ? `<a href="/qr?c=${encodeURIComponent(d.qrKeyId)}" target="_blank">${SCB.escape(d.qrKeyId)}</a>`
             : '';
 
           const rawStatus = (d.action || d.status || '').toString();
           const sNorm = rawStatus.trim().toLowerCase();
-          let statusHtml = rawStatus || '-';
+          let statusHtml = SCB.escape(rawStatus) || '-';
           if (sNorm === 'good' || sNorm === 'delivered') {
             statusHtml = `<span class="badge badge-green">Delivered</span>`;
           }
@@ -327,7 +328,7 @@
         tbody.innerHTML = rows.join('');
       } catch (e) {
         console.error(e);
-        tbody.innerHTML = `<tr><td class="empty" colspan="5">Failed to load: ${e.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td class="empty" colspan="5">Failed to load: ${SCB.escape(e.message)}</td></tr>`;
       }
     }
 

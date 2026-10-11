@@ -17,7 +17,8 @@
   </style>
 </head>
 <body>
-  <script src="/auth.js"></script>
+  <script src="/shared.js"></script>
+<script src="/auth.js"></script>
   <div class="nav">
     <button onclick="window.location.href='/profile'">Back to Profile</button>
     <button onclick="logout()">Logout</button>
@@ -173,17 +174,17 @@
           `${address.streetNumber} ${address.streetName}, ${address.city}` : displayCity;
         
         return `<tr class="box-row">
-          <td>${id}</td>
+          <td>${SCB.escape(id)}</td>
           <td class="location-cell" style="cursor:pointer;" 
-              data-address="${fullAddress.replace(/"/g,'&quot;')}"
-              data-description="${(b.locationDescription||'').replace(/"/g,'&quot;')}">
-            ${displayCity}
+              data-address="${SCB.escape(fullAddress)}"
+              data-description="${SCB.escape(b.locationDescription)}">
+            ${SCB.escape(displayCity)}
           </td>
           <td class="status-cell ${statusClass}" style="cursor:pointer;"
-              data-description="${(b.description||'').replace(/"/g,'&quot;')}">
-            ${status}
+              data-description="${SCB.escape(b.description)}">
+            ${SCB.escape(status)}
           </td>
-          <td>${recent}</td>
+          <td>${SCB.escape(recent)}</td>
           <td>
             <button class="delete-btn" data-id="${id}">Delete</button>
             <button onclick="showReportForm('${id}')" style="margin-left:8px;">Report</button>
@@ -191,6 +192,7 @@
         </tr>`;
       });
       tbody.innerHTML = rows.join('');
+      tbody.querySelectorAll('.report-btn').forEach(button => button.addEventListener('click', () => showReportForm(button.dataset.id)));
 
       // Attach click handlers
       document.querySelectorAll('.box-row').forEach(r => {
@@ -252,7 +254,7 @@
     applySearchFilter();
       } catch (e) {
         console.error(e);
-        tbody.innerHTML = `<tr><td class="empty" colspan="6">Failed to load: ${e.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td class="empty" colspan="6">Failed to load: ${SCB.escape(e.message)}</td></tr>`;
       }
     }
 
@@ -552,10 +554,10 @@
             if (f) dateStr = f;
           }
           const uid = d.recipientId || d.recipient || d.userId || 'unknown';
-          return `<li><strong>${dateStr}</strong> — ${d.action || d.status || ''} <span style="color:#666;">(parcel id: ${d.id} | user: ${uid})</span></li>`;
+          return `<li><strong>${dateStr}</strong> — ${SCB.escape(d.action || d.status || '')} <span style="color:#666;">(parcel id: ${SCB.escape(d.id)} | user: ${SCB.escape(uid)})</span></li>`;
         }).join('');
       } catch (e) {
-        list.innerHTML = `<li>Failed to load: ${e.message}</li>`;
+        list.innerHTML = `<li>Failed to load: ${SCB.escape(e.message)}</li>`;
       }
     }
     function closeAllModals(){

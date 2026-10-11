@@ -5,8 +5,8 @@ Physical Smart Courier Box controller for Raspberry Pi
 Mirrors the behavior of sim/public/sim.js:
 - WAITING/READY: wait for start button press
 - SCANNING_EMAIL: use camera to scan a recipient-email QR (base64-encoded email)
-- CODE_GENERATED: generate a 4-digit pickup code, display QR on OLED, activate actuator to lock
-- SCANNING_PICKUP_CODE: scan pickup QR (base64-encoded 4-digit code or master code 8080)
+- CODE_GENERATED: generate a 6-digit pickup code, display QR on OLED, activate actuator to lock
+- SCANNING_PICKUP_CODE: scan pickup QR (base64-encoded 6-digit code)
 - OPENED: activate actuator to open, show success, then reset
 
 Assumptions (reasonable defaults):
@@ -17,12 +17,15 @@ Assumptions (reasonable defaults):
 
 Configure pins and timing below.
 
-Requirements: see `py/requirements.txt` for the Python packages recommended for full functionality.
+Requirements: see `py/setup/requirements.txt` for the Python packages recommended for full functionality.
 
 Run on the Pi: python3 py/app.py
 """
 
 import base64
+import os
+import secrets
+from urllib.parse import urlencode
 import io
 import logging
 import signal
@@ -106,9 +109,10 @@ ACTUATOR_CLOSE_SEC = 4.0     # run time to fully close
 
 SCAN_TIMEOUT = 30            # seconds to wait while scanning
 OLED_I2C_ADDR = 0x3C         # common SSD1306 I2C address
-MASTER_CODE = '8080'
-AREA_ID = "00"
-SER_ID = 4
+CODE_LIFETIME_SEC = 600
+BASE_URL = os.environ.get('SCB_BASE_URL', 'http://localhost:8080').rstrip('/')
+AREA_ID = os.environ.get("SCB_POST_CODE", "0000")
+SER_ID = os.environ.get("SCB_SERIAL", "4")
 # =======================================================================
 
 
@@ -379,9 +383,8 @@ class SmartCourierBoxApp:
         self.oled.show_image(img)
 
     def generate_pickup_code(self):
-        import random
-        self.generated_code = str(random.randint(1000, 9999))
-        log.info('Generated pickup code: %s', self.generated_code)
+        self.generated_code = str(100000 + secrets.randbelow(900000))
+        self.code_expires_at = time.monotonic() + CODE_LIFETIME_SEC
         return self.generated_code
 
     def show_pickup_qr(self):
@@ -396,7 +399,7 @@ class SmartCourierBoxApp:
         area_b64 = base64.b64encode(AREA_ID.encode('utf-8')).decode('utf-8')
         ser_b64 = base64.b64encode(str(SER_ID).encode('utf-8')).decode('utf-8')
         payload_url = (
-            f"https://smart-courier-box.vercel.app/p?e={email_b64}&c={code_b64}&a={area_b64}&s={ser_b64}"
+            BASE_URL + "/p?" + urlencode({"e": email_b64, "c": code_b64, "a": area_b64, "s": ser_b64})
         )
         # create a QR image sized for OLED
         qr = qrcode.QRCode(box_size=2, border=1)
@@ -471,7 +474,7 @@ class SmartCourierBoxApp:
             decoded_plain = decoded
 
         log.info('Pickup scan content -> %s', decoded_plain)
-        if decoded_plain == self.generated_code or decoded_plain == MASTER_CODE:
+        if self.generated_code and decoded_plain == self.generated_code and time.monotonic() < self.code_expires_at:
             # success: open box (drive to "open" end)
             self.camera.release()
             self.actuator.open()
