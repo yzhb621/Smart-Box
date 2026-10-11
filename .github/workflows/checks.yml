@@ -12,4 +12,6 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
-      - run: python -m py_compile py/app.py
+      - run: npm audit --audit-level=moderate
+      - run: python -m py_compile py/app.py py/cloud.py py/recover.py
+      - run: python -m unittest discover -s py -p 'test_*.py'

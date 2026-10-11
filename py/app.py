@@ -25,6 +25,8 @@ Run on the Pi: python3 py/app.py
 import base64
 import os
 import secrets
+import uuid
+from cloud import CloudClient, StateStore
 from urllib.parse import urlencode
 import io
 import logging
@@ -152,8 +154,7 @@ class PhysicalActuator:
     def pulse(self, duration=ACTUATOR_PULSE_SEC):
         log.info('Actuator pulse %ss', duration)
         if not GPIO_AVAILABLE:
-            log.warning('GPIO not available; skipping actuator pulse')
-            return
+            raise RuntimeError('GPIO unavailable')
         if self.mode != 'single':
             # Fallback behavior if called in hbridge mode: brief enable with current DIR
             self._drive_enabled(duration=duration)
@@ -168,7 +169,10 @@ class PhysicalActuator:
                 time.sleep(duration)
                 self.GPIO.output(self.pin, self.GPIO.LOW)
         except Exception as e:
-            log.exception('Failed to pulse actuator: %s', e)
+            log.exception('Failed to pulse actuator')
+            raise
+        finally:
+            self._disable()
 
     def open(self, duration=ACTUATOR_OPEN_SEC):
         if self.mode == 'hbridge':
@@ -195,8 +199,7 @@ class PhysicalActuator:
     # --- helpers for hbridge ---
     def _drive_dir(self, dir_high: bool, duration: float):
         if not GPIO_AVAILABLE:
-            log.warning('GPIO not available; skipping drive')
-            return
+            raise RuntimeError('GPIO unavailable')
         try:
             if self._using_gpiozero:
                 if dir_high:
@@ -212,7 +215,10 @@ class PhysicalActuator:
                 time.sleep(duration)
                 self.GPIO.output(self.pin, self.GPIO.LOW)   # EN off
         except Exception as e:
-            log.exception('Failed to drive actuator: %s', e)
+            log.exception('Failed to drive actuator')
+            raise
+        finally:
+            self._disable()
 
     def _drive_enabled(self, duration: float):
         # Enable output for a duration using current DIR state
@@ -226,7 +232,17 @@ class PhysicalActuator:
                 time.sleep(duration)
                 self.GPIO.output(self.pin, self.GPIO.LOW)
         except Exception as e:
-            log.exception('Failed to enable actuator: %s', e)
+            log.exception('Failed to enable actuator')
+            raise
+        finally:
+            self._disable()
+
+    def _disable(self):
+        # Always de-energize, including failures or interruption during the timed pulse.
+        if self._using_gpiozero:
+            (self.dev if self.mode == 'single' else self.en_dev).off()
+        else:
+            self.GPIO.output(self.pin, self.GPIO.LOW)
 
 
 class PhysicalButton:
@@ -332,7 +348,7 @@ class CameraScanner:
             decoded = pyzbar.decode(frame)
             if decoded:
                 text = decoded[0].data.decode('utf-8')
-                log.info('QR decoded: %s', text)
+                log.info('QR decoded')
                 return text
             # small sleep to yield
             time.sleep(0.05)
@@ -355,9 +371,16 @@ class SmartCourierBoxApp:
         dir_pin = ACTUATOR_DIR_PIN if ACTUATOR_MODE == 'hbridge' else None
         self.actuator = PhysicalActuator(pin=ACTUATOR_PIN, dir_pin=dir_pin, mode=ACTUATOR_MODE)
         self.oled = OLEDDisplay()
-        self.button = PhysicalButton(callback=self.on_button)
         self.lock = threading.Lock()
         self._stop = False
+        self.cloud = CloudClient(BASE_URL)
+        self.store = StateStore()
+        self.delivery_state = self.store.load()
+        if self.delivery_state and self.delivery_state.get("phase") == "delivered":
+            self.generated_code = self.delivery_state["code"]
+            self.code_expires_at = time.monotonic() + max(0, self.delivery_state["expiresAt"] / 1000 - time.time())
+            self.scanned_email_b64 = self.delivery_state["email"]
+        self.button = PhysicalButton(callback=self.on_button)
 
     def update_state(self, new_state: SystemState):
         with self.lock:
@@ -385,6 +408,8 @@ class SmartCourierBoxApp:
     def generate_pickup_code(self):
         self.generated_code = str(100000 + secrets.randbelow(900000))
         self.code_expires_at = time.monotonic() + CODE_LIFETIME_SEC
+        self.delivery_state = {"phase": "delivered", "deliveryId": str(uuid.uuid4()), "expiresAt": int(time.time() * 1000) + CODE_LIFETIME_SEC * 1000, "email": self.scanned_email_b64, "code": self.generated_code}
+        self.store.save(self.delivery_state)
         return self.generated_code
 
     def show_pickup_qr(self):
@@ -399,29 +424,33 @@ class SmartCourierBoxApp:
         area_b64 = base64.b64encode(AREA_ID.encode('utf-8')).decode('utf-8')
         ser_b64 = base64.b64encode(str(SER_ID).encode('utf-8')).decode('utf-8')
         payload_url = (
-            BASE_URL + "/p?" + urlencode({"e": email_b64, "c": code_b64, "a": area_b64, "s": ser_b64})
+            BASE_URL + "/p?" + urlencode({"e": email_b64, "c": code_b64, "a": area_b64, "s": ser_b64, "d": self.delivery_state["deliveryId"], "t": self.delivery_state["expiresAt"]})
         )
-        # create a QR image sized for OLED
-        qr = qrcode.QRCode(box_size=2, border=1)
+        # Keep the complete QR intact. Long delivery URLs cannot reliably fit a 128x64 OLED.
+        qr = qrcode.QRCode(box_size=4, border=4)
         qr.add_data(payload_url)
         qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white").convert('RGB')
-        # center QR on 128x64 canvas
-        canvas_img = Image.new('RGB', (128, 64), 'white')
-        w, h = img.size
-        x = max(0, (128 - w) // 2)
-        y = max(0, (64 - h) // 2)
-        canvas_img.paste(img, (x, y))
-        self.oled.show_image(canvas_img)
+        path = os.environ.get('SCB_QR_IMAGE', '/tmp/scb-delivery.png')
+        qr.make_image(fill_color='black', back_color='white').save(path)
+        self._show_message('Delivery QR saved', 'Use external display')
+        log.info('Complete delivery QR saved to %s', path)
 
     def on_button(self):
+        if self.delivery_state and self.delivery_state.get("phase") in ("opened", "opening"):
+            if self.delivery_state["phase"] == "opening":
+                self._show_message("Check physical lock", "Opening interrupted")
+                return
+            self._sync_pickup()
+            return
         # Button press advances actions depending on state
         with self.lock:
             st = self.state
         if st == SystemState.READY:
             # start scanning for recipient email
+            self.update_state(SystemState.SCANNING_EMAIL)
             threading.Thread(target=self._scan_email_flow, daemon=True).start()
         elif st == SystemState.CODE_GENERATED:
+            self.update_state(SystemState.SCANNING_PICKUP_CODE)
             threading.Thread(target=self._scan_pickup_flow, daemon=True).start()
         else:
             log.info('Button press ignored in state %s', st.value)
@@ -446,7 +475,7 @@ class SmartCourierBoxApp:
             self.recipient_email = email
             self.scanned_email_b64 = decoded
         except Exception:
-            log.info('Invalid email QR: %s', decoded)
+            log.info('Invalid email QR')
             self._show_message('Invalid email QR', '')
             time.sleep(2)
             self.update_state(SystemState.READY)
@@ -463,9 +492,9 @@ class SmartCourierBoxApp:
         self.update_state(SystemState.SCANNING_PICKUP_CODE)
         decoded = self.camera.scan_for_qr()
         if decoded is None:
-            self._show_message('Scan timed out', 'Returning to ready')
+            self._show_message('Scan timed out', 'Try pickup again')
             time.sleep(2)
-            self.update_state(SystemState.READY)
+            self.update_state(SystemState.CODE_GENERATED)
             return
 
         try:
@@ -473,24 +502,53 @@ class SmartCourierBoxApp:
         except Exception:
             decoded_plain = decoded
 
-        log.info('Pickup scan content -> %s', decoded_plain)
+        log.info('Pickup code scanned')
         if self.generated_code and decoded_plain == self.generated_code and time.monotonic() < self.code_expires_at:
-            # success: open box (drive to "open" end)
-            self.camera.release()
-            self.actuator.open()
-            self.update_state(SystemState.OPENED)
-            time.sleep(3)
-            self.generated_code = None
-            self.update_state(SystemState.READY)
-            # reopen camera for future scans
-            self.camera = CameraScanner()
+            try:
+                code = base64.b64encode(self.generated_code.encode()).decode()
+                verified = self.cloud.post('/api/pickups/verify', {'deliveryId': self.delivery_state['deliveryId'], 'qrKeyId': code})
+                self.delivery_state.update({'phase': 'opening', 'parcelId': verified['id']})
+                self.store.save(self.delivery_state)
+                self.actuator.open()
+                self.delivery_state['phase'] = 'opened'
+                self.store.save(self.delivery_state)
+                self.update_state(SystemState.OPENED)
+                self._sync_pickup()
+            except Exception:
+                log.error('Pickup interrupted; check cloud connection and physical lock before retrying')
+                self._show_message('Pickup interrupted', 'Check lock/cloud')
+                self.update_state(SystemState.CODE_GENERATED)
+
         else:
             self._show_message('Invalid pickup code', '')
             time.sleep(2)
             self.update_state(SystemState.CODE_GENERATED)
 
+    def _sync_pickup(self):
+        try:
+            state = self.delivery_state
+            code = base64.b64encode(state['code'].encode()).decode()
+            self.cloud.post('/api/parcels/' + state['parcelId'] + '/retrieve', {'qrKeyId': code})
+            self.store.clear()
+            self.delivery_state = None
+            self.generated_code = None
+            self.update_state(SystemState.READY)
+        except Exception:
+            log.error('Pickup sync pending; press button to retry without opening again')
+            self._show_message('Pickup sync pending', 'Press button to retry')
+
     def run(self):
-        self.update_state(SystemState.READY)
+        if self.delivery_state:
+            phase = self.delivery_state.get("phase")
+            if phase == "opened":
+                self._sync_pickup()
+            elif phase == "opening":
+                self._show_message("Check physical lock", "Opening interrupted")
+            else:
+                self.update_state(SystemState.CODE_GENERATED)
+                self.show_pickup_qr()
+        else:
+            self.update_state(SystemState.READY)
         # main loop - keep alive
         try:
             while not self._stop:

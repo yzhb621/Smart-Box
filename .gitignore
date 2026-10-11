@@ -33,3 +33,7 @@ Thumbs.db
 __pycache__/
 *.pyc
 py/venv/
+
+.scb-state.json
+.scb-state.tmp
+*id-token*

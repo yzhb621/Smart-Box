@@ -72,7 +72,7 @@
     .dark-theme h2.title{ color:#e6eef6; }
 
     /* ===== Table ===== */
-    .table-wrap{ overflow:hidden; border-radius:10px; border:1px solid #e6eefc; }
+    .table-wrap{ overflow:auto; border-radius:10px; border:1px solid #e6eefc; }
     .dark-theme .table-wrap{ border-color: rgba(79,179,255,0.25); }
     table{ border-collapse:separate; border-spacing:0; width:100%; background:transparent; }
     thead tr{ background: linear-gradient(90deg,#ffffff,#fbfdff); }
@@ -145,7 +145,7 @@
         <div class="table-wrap">
           <table id="historyTable">
             <thead>
-              <tr><th>Delivery Date</th><th>Status</th><th>Location</th><th>SCB Serial #</th><th>Key</th></tr>
+              <tr><th>Delivery Date</th><th>Status</th><th>Location</th><th>SCB Serial #</th><th>Pickup / Email</th></tr>
             </thead>
             <tbody><tr><td class="empty" colspan="5">Loading...</td></tr></tbody>
           </table>
@@ -305,10 +305,14 @@
             serialDisplay = `<div style="margin-top:4px;font-size:13px;">${serialDisplay}</div>`;
           }
 
-          const qrLink = d.qrKeyId
+          const active = d.status === 'delivered' && (!d.expiresAt || d.expiresAt > Date.now());
+          const qrLink = active && d.qrKeyId
             ? `<a href="/qr?c=${encodeURIComponent(d.qrKeyId)}" target="_blank">${SCB.escape(d.qrKeyId)}</a>`
             : '';
 
+          const emailStatus = d.notificationStatus || '';
+          const emailAction = emailStatus === 'pending' && active && /^[a-f0-9]{64}$/.test(d.id) ? `<button class="btn" data-notify="${d.id}">Retry pickup email</button>` : '';
+          const notification = emailStatus ? `<div>Email: ${SCB.escape(emailStatus)}</div>${emailAction}` : '';
           const rawStatus = (d.action || d.status || '').toString();
           const sNorm = rawStatus.trim().toLowerCase();
           let statusHtml = SCB.escape(rawStatus) || '-';
@@ -321,11 +325,19 @@
             <td>${statusHtml}</td>
             <td>${areaLoc || '-'}</td>
             <td>${serialDisplay || '-'}</td>
-            <td style="min-width:180px">${qrLink || '-'}</td>
+            <td style="min-width:180px">${qrLink || (d.status === 'retrieved' ? 'Collected' : 'Unavailable')}${notification}</td>
           </tr>`;
         });
 
         tbody.innerHTML = rows.join('');
+        tbody.querySelectorAll('[data-notify]').forEach(button => button.addEventListener('click', async () => {
+          button.disabled = true;
+          try {
+            const result = await SCBAuth.fetch('/api/parcels/' + button.dataset.notify + '/notify', {method:'POST'});
+            if (!result.ok) throw new Error((await result.json()).error);
+            await loadHistory();
+          } catch (error) { button.textContent = error.message; button.disabled = false; }
+        }));
       } catch (e) {
         console.error(e);
         tbody.innerHTML = `<tr><td class="empty" colspan="5">Failed to load: ${SCB.escape(e.message)}</td></tr>`;

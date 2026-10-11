@@ -260,66 +260,7 @@ app.post('/api/history/:email', authenticateFirebase, async (req, res) => {
     }
 });
 
-// Add new parcel to 'parcels' collection
-app.post('/api/parcels', authenticateFirebase, async (req, res) => {
-    try {
-        const { 
-            courierId, 
-            createdAt, 
-            deliveredAt, 
-            deliveryAddress, 
-            qrKeyId, 
-            recipientId, 
-            retrievedAt, 
-            status,
-            areaId,
-            postCode, 
-            serialNumber 
-        } = req.body;
-
-        // Normalize serialNumber:
-        // - If serialNumber looks like a short seq (numeric <=8) and postCode provided, pad to 8 and prefix postCode -> final 12-digit serial
-        // - Else pad numeric serial to 12 digits
-        let finalSerial = null;
-        if (serialNumber !== undefined && serialNumber !== null) {
-            const sRaw = String(serialNumber).replace(/\D/g, '');
-            if (postCode && /^[0-9]{1,8}$/.test(sRaw)) {
-                const seq8 = sRaw.padStart(8, '0');
-                finalSerial = `${postCode}${seq8}`;
-            } else if (/^[0-9]+$/.test(sRaw)) {
-                finalSerial = sRaw.padStart(12, '0');
-            } else {
-                finalSerial = String(serialNumber);
-            }
-        }
-
-        if (!recipientId || !finalSerial || !qrKeyId) {
-            return res.status(400).json({ error: 'Recipient, serial number and pickup code are required' });
-        }
-        if (!/^\d{4}$/.test(String(postCode || '')) || !/^\d{12}$/.test(finalSerial) || !/^\d{6}$/.test(Buffer.from(String(qrKeyId), 'base64').toString('utf8'))) return res.status(400).json({ error: 'Invalid postcode, serial or pickup code' });
-        const recipient = await db.collection('users').doc(String(recipientId)).get();
-        if (!recipient.exists) return res.status(404).json({ error: 'Recipient not found' });
-        if (req.user && req.user.uid !== recipientId && !['admin', 'courier'].includes(req.user.claims.role)) {
-            return res.status(403).json({ error: 'Courier role required for another recipient' });
-        }
-        const parcel = await db.collection('parcels').add({
-            courierId: req.user.uid,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            deliveredAt: admin.firestore.FieldValue.serverTimestamp(),
-            deliveryAddress: deliveryAddress || null,
-            qrKeyId,
-            recipientId,
-            retrievedAt: null,
-            status: status || 'delivered',
-            areaId: areaId || null,
-            postCode: postCode || null,
-            serialNumber: finalSerial
-        });
-        res.json({ success: true, id: parcel.id });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
+app.use('/api', require('./routes/deliveries'));
 
 // Get boxes (defaults to type 'SCB')
 app.get('/api/boxes', authenticateFirebase, async (req, res) => {

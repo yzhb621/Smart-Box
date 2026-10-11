@@ -25,6 +25,13 @@ const boxImage = document.getElementById('boxImage');
 const unlockSound = document.getElementById('unlockSound');
 const lockSound = document.getElementById('lockSound');
 let codeExpiresAt = 0;
+let deliveryId = null;
+let scanBusy = false;
+let pendingParcelId = null;
+let recipientEmailQr = null;
+function saveSession() {
+  sessionStorage.setItem("scbDelivery", JSON.stringify({generatedCode,codeExpiresAt,deliveryId,pendingParcelId,recipientEmailQr}));
+}
 
 function initScanner() {
   html5QrcodeScanner = new Html5QrcodeScanner("scannerView", {
@@ -99,13 +106,16 @@ function updateSystemState(newState) {
   }
 }
 
-async function onScanSuccess(decodedText) {
+async function handleScan(decodedText) {
   if (currentState === SystemState.SCANNING_EMAIL) {
     if (isValidEmail(decodedText)) {
       generatedCode = generatePickupCode();
+      deliveryId = crypto.randomUUID();
+      recipientEmailQr = decodedText;
       codeExpiresAt = Date.now() + window.SCBConfig.codeLifetimeMs;
+      saveSession();
       const deliveryUrl = new URL("/p", window.SCBConfig.baseUrl);
-      deliveryUrl.search = new URLSearchParams({e:decodedText,c:btoa(generatedCode),a:btoa(areaID),s:btoa(serID)}).toString();
+      deliveryUrl.search = new URLSearchParams({e:decodedText,c:btoa(generatedCode),a:btoa(areaID),s:btoa(serID),d:deliveryId,t:String(codeExpiresAt)}).toString();
       await QRCode.toCanvas(qrCanvas, deliveryUrl.href, {
         width: 180, margin: 2
       });
@@ -118,25 +128,46 @@ async function onScanSuccess(decodedText) {
   } else if (currentState === SystemState.SCANNING_PICKUP_CODE) {
     try {
       const decoded = atob(decodedText);
-      if (generatedCode && decoded === generatedCode && Date.now() < codeExpiresAt) {
-        html5QrcodeScanner.clear();
+      if (generatedCode && decoded === generatedCode && (Date.now() < codeExpiresAt || pendingParcelId)) {
+        if (!pendingParcelId) {
+          const verified = await SCBAuth.fetch('/api/pickups/verify', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deliveryId,qrKeyId:decodedText})});
+          const verification = await verified.json();
+          if (!verified.ok) throw new Error(verification.error);
+          pendingParcelId = verification.id;
+          saveSession();
+        }
+        const retrieved = await SCBAuth.fetch('/api/parcels/' + pendingParcelId + '/retrieve', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({qrKeyId:decodedText})});
+        if (!retrieved.ok) throw new Error((await retrieved.json()).error);
+        await html5QrcodeScanner.clear().catch(() => {});
         updateSystemState(SystemState.OPENED);
       } else {
         scannerMessage.textContent = "Invalid pickup code, try again";
       }
-    } catch { scannerMessage.textContent = "Malformed QR code"; }
+    } catch (error) { scannerMessage.textContent = error.message || "Malformed QR code"; }
   }
 }
 
+async function onScanSuccess(text) {
+  if (scanBusy) return;
+  scanBusy = true;
+  try { await handleScan(text); } catch (error) { scannerMessage.textContent = error.message; } finally { scanBusy = false; }
+}
+
 async function resetSystem() {
+  if (scanBusy) return;
+  sessionStorage.removeItem("scbDelivery");
+  pendingParcelId = null;
+  recipientEmailQr = null;
   generatedCode = null;
+  deliveryId = null;
   codeExpiresAt = 0;
-  if (html5QrcodeScanner) html5QrcodeScanner.clear();
+  if (html5QrcodeScanner) await html5QrcodeScanner.clear().catch(() => {});
   scannerView.innerHTML = '<p>Click “Start Delivery” to begin.</p>';
   updateSystemState(SystemState.READY);
 }
 
-startBtn.addEventListener('click', () => {
+startBtn.addEventListener('click', async () => {
+  try { if (!await SCBAuth.getToken()) throw new Error('Sign in on the home page first.'); } catch (error) { scannerMessage.textContent = error.message; return; }
   if (currentState === SystemState.READY) {
     scannerView.innerHTML = '';
     initScanner();
@@ -155,5 +186,18 @@ scanPickupBtn.addEventListener('click', () => {
 });
 
 resetBtn.addEventListener('click', resetSystem);
+try {
+  const stored = JSON.parse(sessionStorage.getItem('scbDelivery') || 'null');
+  if (stored && /^\d{6}$/.test(stored.generatedCode) && typeof stored.deliveryId === 'string') {
+    ({generatedCode,codeExpiresAt,deliveryId,pendingParcelId,recipientEmailQr} = stored);
+  }
+} catch (_) { sessionStorage.removeItem('scbDelivery'); }
 
-updateSystemState(SystemState.READY);
+updateSystemState(generatedCode ? SystemState.CODE_GENERATED : SystemState.READY);
+if (generatedCode) {
+  const url = new URL('/p', window.SCBConfig.baseUrl);
+  url.search = new URLSearchParams({e:recipientEmailQr,c:btoa(generatedCode),a:btoa(areaID),s:btoa(serID),d:deliveryId,t:String(codeExpiresAt)}).toString();
+  QRCode.toCanvas(qrCanvas, url.href, {width:180,margin:2}).catch(error => {scannerMessage.textContent=error.message;});
+  startBtn.disabled = true;
+  resetBtn.disabled = false;
+}
