@@ -26,6 +26,7 @@ if (process.env.NODE_ENV === 'test') {
     })(),
     // mock auth API for createUser
     auth: () => ({
+      verifyIdToken: async (token) => { if (token !== 'test-user') throw new Error('Invalid token'); return { uid: 'test-user', email: 'test@example.com', role: 'user' }; },
       createUser: async ({ email, password }) => ({ uid: `test-${Math.random().toString(36).slice(2,9)}`, email })
     })
   };
@@ -48,19 +49,7 @@ if (process.env.NODE_ENV === 'test') {
     const clientId = process.env.CLIENT_ID || process.env.client_id;
 
     if (!projectId || !clientEmail || !privateKey) {
-      console.warn('Warning: Firebase admin env variables missing; continuing with a mock admin. Set PROJECT_ID, client_email and private_key in .env to enable real Firebase.');
-      // provide a mock admin that prevents startup crashes; route handlers will receive empty results or can handle errors
-      return {
-        apps: [],
-        initializeApp: () => {},
-        credential: { cert: () => ({}) },
-        firestore: () => ({
-          collection: () => ({
-            where: () => ({ get: async () => ({ empty: true, docs: [] }) }),
-            doc: () => ({ collection: () => ({ add: async () => ({}) }), set: async () => ({}) })
-          })
-        })
-      };
+      throw new Error('Firebase Admin configuration missing: set PROJECT_ID, CLIENT_EMAIL and PRIVATE_KEY.');
     }
 
     admin.initializeApp({

@@ -29,3 +29,11 @@ Thumbs.db
 *.bak
 *.orig
 .vercel
+
+__pycache__/
+*.pyc
+py/venv/
+
+.scb-state.json
+.scb-state.tmp
+*id-token*

@@ -175,7 +175,8 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-  <script src="/auth.js"></script>
+  <script src="/shared.js"></script>
+<script src="/auth.js"></script>
   <script>
     (async function(){
       try{
@@ -333,12 +334,18 @@ document.getElementById('loginForm').onsubmit = async function (e) {
 };
 
 async function genInitQRCode(email) {
-  var passcode = "https://smart-courier-box.vercel.app/qr?c=" + btoa(email);
+  const qrUrl = new URL("/qr", window.location.origin);
+  qrUrl.searchParams.set("c", btoa(email));
+  const passcode = qrUrl.href;
   var params = { email: email, passcode: passcode };
   try {
-    await emailjs.send("service_agd4kkq","template_z6zcllo", params);
+    const config = await SCB.emailConfig();
+    if (!config.registrationTemplateId) throw new Error("Registration email template is not configured");
+    await emailjs.send(config.serviceId, config.registrationTemplateId, params);
+    return true;
   } catch (error) {
     console.log('FAILED...', error);
+    return false;
   }
 }
 
@@ -354,9 +361,9 @@ document.getElementById('registerForm').onsubmit = async function (e) {
         await SCBAuth.signIn(email, password);
       } catch (_) {}
       localStorage.setItem('uid', result.uid || '');
-      await genInitQRCode(email);
+      const emailSent = await genInitQRCode(email);
       closeRegister();
-      alert('Registered successfully! Please check your email.');
+      alert(emailSent ? 'Registered successfully! Please check your email.' : 'Account created. Email could not be sent. You can sign in and access your profile.');
     } else {
       alert('Registration failed');
     }

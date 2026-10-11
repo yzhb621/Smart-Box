@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-#set -euo pipefail
+set -euo pipefail
+TASK_SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$TASK_SCRIPT_DIR/.."
 
 # Raspberry Pi setup script for Smart Courier Box (run from the repo's py/ directory)
 # - Installs apt dependencies
@@ -47,7 +49,7 @@ echo "--- Activating venv and installing Python packages ---"
 source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip setuptools wheel
 
-REQ_FILE="requirements.txt"
+REQ_FILE="setup/requirements.txt"
 if [ -f "$REQ_FILE" ]; then
   pip install -r "$REQ_FILE"
 else
@@ -58,8 +60,8 @@ fi
 # Add common groups for hardware access (may require logout/login to take effect)
 echo "--- Adding current user to gpio and video groups (may require reboot) ---"
 if [ -n "$SUDO" ]; then
-  $SUDO usermod -aG gpio "$SUDO_USER"
-  $SUDO usermod -aG video "$SUDO_USER"
+  $SUDO usermod -aG gpio "${SUDO_USER:-$USER}"
+  $SUDO usermod -aG video "${SUDO_USER:-$USER}"
 else
   usermod -aG gpio "$USER"
   usermod -aG video "$USER"
@@ -72,6 +74,6 @@ echo "  2) After reboot, cd into the repo py/ directory and activate the venv: s
 echo "  3) Run the app: python3 app.py"
 echo
 
-echo "If you encounter OpenCV wheel errors, you may need to install a prebuilt OpenCV package for your Pi or build from source. See py/INSTALLATION.md for troubleshooting."
+echo "If you encounter OpenCV wheel errors, you may need to install a prebuilt OpenCV package for your Pi or build from source. See py/setup/INSTALLATION.md for troubleshooting."
 
 exit 0

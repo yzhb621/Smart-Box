@@ -17,7 +17,9 @@ window.SCBAuth = (function(){
           await loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js');
         }
         const res = await fetch('/api/firebase-config');
+        if (!res.ok) throw new Error('Unable to load sign-in configuration');
         const cfg = await res.json();
+        if (!cfg.apiKey || !cfg.projectId || !cfg.authDomain) throw new Error('Sign-in is not configured. Set the Firebase web app variables on the server.');
         if (!firebase.apps.length) {
           firebase.initializeApp(cfg);
         }
@@ -30,6 +32,7 @@ window.SCBAuth = (function(){
         initialized = true;
         return true;
       } catch (e) {
+        initPromise = null;
         console.error('Failed to init Firebase client', e);
         throw e;
       }
@@ -40,7 +43,11 @@ window.SCBAuth = (function(){
   function loadScript(src){
     return new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = src; s.async = true; s.onload = resolve; s.onerror = reject; document.head.appendChild(s);
+      const timer = setTimeout(() => { s.remove(); reject(new Error('Sign-in library could not load. Check your connection.')); }, 10000);
+      s.src = src; s.async = true;
+      s.onload = () => { clearTimeout(timer); resolve(); };
+      s.onerror = () => { clearTimeout(timer); s.remove(); reject(new Error('Sign-in library unavailable')); };
+      document.head.appendChild(s);
     });
   }
 
@@ -50,7 +57,9 @@ window.SCBAuth = (function(){
     const token = await cred.user.getIdToken();
     try { localStorage.setItem('authToken', token); } catch(e) {}
     try { localStorage.setItem('uid', cred.user.uid); } catch(e) {}
-  try { localStorage.setItem('email', cred.user.email || email); } catch(e) {}
+    try { localStorage.setItem('email', cred.user.email || email); } catch(e) {}
+    const setup = await authFetch('/api/profile/' + encodeURIComponent(cred.user.uid), {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    if (!setup.ok) throw new Error('Signed in, but profile setup failed. Please try again.');
     return { uid: cred.user.uid, email: cred.user.email, token };
   }
 
@@ -60,9 +69,10 @@ window.SCBAuth = (function(){
     const token = await cred.user.getIdToken();
     try { localStorage.setItem('authToken', token); } catch(e) {}
     try { localStorage.setItem('uid', cred.user.uid); } catch(e) {}
+    try { localStorage.setItem('email', cred.user.email || email); } catch(e) {}
     // Create initial profile doc on server
     try {
-      await authFetch(`/api/profile/${encodeURIComponent(cred.user.uid)}`, {
+      const profileResponse = await authFetch(`/api/profile/${encodeURIComponent(cred.user.uid)}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           address: '',
@@ -73,7 +83,8 @@ window.SCBAuth = (function(){
           uid: cred.user.uid
         })
       });
-    } catch (_) {}
+      if (!profileResponse.ok) throw new Error('Account created, but profile setup failed. Sign in again to retry.');
+    } catch (error) { throw error; }
     return { success: true, uid: cred.user.uid, user: cred.user.email };
   }
 

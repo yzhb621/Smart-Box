@@ -3,7 +3,6 @@ const admin = require('../config/firebaseAdmin');
 // Verify Authorization: Bearer <idToken>; attach req.user = { uid, email }
 async function authenticateFirebase(req, res, next) {
   try {
-  if (process.env.NODE_ENV === 'test') { return next(); }
     const authHeader = req.headers['authorization'] || req.headers['Authorization'];
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Missing Authorization Bearer token' });
@@ -17,6 +16,10 @@ async function authenticateFirebase(req, res, next) {
 
     const decoded = await admin.auth().verifyIdToken(idToken);
     req.user = { uid: decoded.uid, email: decoded.email || null, claims: decoded };
+    if (!decoded.role) {
+      const profile = await admin.firestore().collection('users').doc(decoded.uid).get();
+      if (profile.exists) req.user.claims.role = profile.data().role || 'user';
+    }
     next();
   } catch (e) {
     return res.status(401).json({ error: 'Unauthorized', detail: e && e.message ? e.message : String(e) });
@@ -27,7 +30,6 @@ async function authenticateFirebase(req, res, next) {
 function requireRole(requiredRole) {
   return async (req, res, next) => {
     try {
-  if (process.env.NODE_ENV === 'test') { return next(); }
       if (!req.user || !req.user.uid) return res.status(401).json({ error: 'Unauthorized' });
 
       // Prefer custom claim `role`

@@ -6,8 +6,8 @@ const SystemState = {
   OPENED: 'opened'
 };
 
-const areaID = "0000";
-const serID = 4;
+const areaID = window.SCBConfig.postCode;
+const serID = window.SCBConfig.serial;
 
 let currentState = SystemState.READY;
 let generatedCode = null;
@@ -24,7 +24,14 @@ const qrCanvas = document.getElementById('qrCanvas');
 const boxImage = document.getElementById('boxImage');
 const unlockSound = document.getElementById('unlockSound');
 const lockSound = document.getElementById('lockSound');
-const MASTER_CODE = "8080";
+let codeExpiresAt = 0;
+let deliveryId = null;
+let scanBusy = false;
+let pendingParcelId = null;
+let recipientEmailQr = null;
+function saveSession() {
+  sessionStorage.setItem("scbDelivery", JSON.stringify({generatedCode,codeExpiresAt,deliveryId,pendingParcelId,recipientEmailQr}));
+}
 
 function initScanner() {
   html5QrcodeScanner = new Html5QrcodeScanner("scannerView", {
@@ -42,7 +49,9 @@ function isValidEmail(email) {
 }
 
 function generatePickupCode() {
-  return Math.floor(1000 + Math.random() * 9000).toString();
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  return (100000 + bytes[0] % 900000).toString();
 }
 
 function updateSystemState(newState) {
@@ -91,21 +100,27 @@ function updateSystemState(newState) {
       scanPickupBtn.disabled = true;
       resetBtn.disabled = false;
       boxImage.src = "images/open.png";
-      unlockSound.play();
+      unlockSound.play().catch(() => {});
       setTimeout(resetSystem, 3000);
       break;
   }
 }
 
-async function onScanSuccess(decodedText) {
+async function handleScan(decodedText) {
   if (currentState === SystemState.SCANNING_EMAIL) {
     if (isValidEmail(decodedText)) {
       generatedCode = generatePickupCode();
-      QRCode.toCanvas(qrCanvas, "https://smart-courier-box.vercel.app/p?e=" + decodedText + "&c=" + btoa(generatedCode) + "&a=" + btoa(areaID) + "&s=" + btoa(serID), {
+      deliveryId = crypto.randomUUID();
+      recipientEmailQr = decodedText;
+      codeExpiresAt = Date.now() + window.SCBConfig.codeLifetimeMs;
+      saveSession();
+      const deliveryUrl = new URL("/p", window.SCBConfig.baseUrl);
+      deliveryUrl.search = new URLSearchParams({e:decodedText,c:btoa(generatedCode),a:btoa(areaID),s:btoa(serID),d:deliveryId,t:String(codeExpiresAt)}).toString();
+      await QRCode.toCanvas(qrCanvas, deliveryUrl.href, {
         width: 180, margin: 2
       });
       updateSystemState(SystemState.CODE_GENERATED);
-      html5QrcodeScanner.clear();
+      await html5QrcodeScanner.clear().catch(() => {});
       scannerView.innerHTML = '<p>Wait for the pickup code to be scanned</p>';
     } else {
       scannerMessage.textContent = "Invalid email QR code, try again";
@@ -113,23 +128,46 @@ async function onScanSuccess(decodedText) {
   } else if (currentState === SystemState.SCANNING_PICKUP_CODE) {
     try {
       const decoded = atob(decodedText);
-      if (decoded === generatedCode || decoded === MASTER_CODE) {
-        html5QrcodeScanner.clear();
+      if (generatedCode && decoded === generatedCode && (Date.now() < codeExpiresAt || pendingParcelId)) {
+        if (!pendingParcelId) {
+          const verified = await SCBAuth.fetch('/api/pickups/verify', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deliveryId,qrKeyId:decodedText})});
+          const verification = await verified.json();
+          if (!verified.ok) throw new Error(verification.error);
+          pendingParcelId = verification.id;
+          saveSession();
+        }
+        const retrieved = await SCBAuth.fetch('/api/parcels/' + pendingParcelId + '/retrieve', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({qrKeyId:decodedText})});
+        if (!retrieved.ok) throw new Error((await retrieved.json()).error);
+        await html5QrcodeScanner.clear().catch(() => {});
         updateSystemState(SystemState.OPENED);
       } else {
         scannerMessage.textContent = "Invalid pickup code, try again";
       }
-    } catch { scannerMessage.textContent = "Malformed QR code"; }
+    } catch (error) { scannerMessage.textContent = error.message || "Malformed QR code"; }
   }
 }
 
-function resetSystem() {
-  if (html5QrcodeScanner) html5QrcodeScanner.clear();
+async function onScanSuccess(text) {
+  if (scanBusy) return;
+  scanBusy = true;
+  try { await handleScan(text); } catch (error) { scannerMessage.textContent = error.message; } finally { scanBusy = false; }
+}
+
+async function resetSystem() {
+  if (scanBusy) return;
+  sessionStorage.removeItem("scbDelivery");
+  pendingParcelId = null;
+  recipientEmailQr = null;
+  generatedCode = null;
+  deliveryId = null;
+  codeExpiresAt = 0;
+  if (html5QrcodeScanner) await html5QrcodeScanner.clear().catch(() => {});
   scannerView.innerHTML = '<p>Click “Start Delivery” to begin.</p>';
   updateSystemState(SystemState.READY);
 }
 
-startBtn.addEventListener('click', () => {
+startBtn.addEventListener('click', async () => {
+  try { if (!await SCBAuth.getToken()) throw new Error('Sign in on the home page first.'); } catch (error) { scannerMessage.textContent = error.message; return; }
   if (currentState === SystemState.READY) {
     scannerView.innerHTML = '';
     initScanner();
@@ -148,5 +186,18 @@ scanPickupBtn.addEventListener('click', () => {
 });
 
 resetBtn.addEventListener('click', resetSystem);
+try {
+  const stored = JSON.parse(sessionStorage.getItem('scbDelivery') || 'null');
+  if (stored && /^\d{6}$/.test(stored.generatedCode) && typeof stored.deliveryId === 'string') {
+    ({generatedCode,codeExpiresAt,deliveryId,pendingParcelId,recipientEmailQr} = stored);
+  }
+} catch (_) { sessionStorage.removeItem('scbDelivery'); }
 
-updateSystemState(SystemState.READY);
+updateSystemState(generatedCode ? SystemState.CODE_GENERATED : SystemState.READY);
+if (generatedCode) {
+  const url = new URL('/p', window.SCBConfig.baseUrl);
+  url.search = new URLSearchParams({e:recipientEmailQr,c:btoa(generatedCode),a:btoa(areaID),s:btoa(serID),d:deliveryId,t:String(codeExpiresAt)}).toString();
+  QRCode.toCanvas(qrCanvas, url.href, {width:180,margin:2}).catch(error => {scannerMessage.textContent=error.message;});
+  startBtn.disabled = true;
+  resetBtn.disabled = false;
+}
