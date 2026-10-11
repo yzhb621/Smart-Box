@@ -6,8 +6,9 @@
   "scripts": {
     "devStart": "npm --prefix server run dev",
     "start": "npm --prefix server start",
-    "build": "npm --prefix server start",
-    "install:server": "npm --prefix server install"
+    "build": "node --check server/src/index.js && node --check api/index.js",
+    "install:server": "npm --prefix server install",
+    "test": "npm --prefix server test -- --runInBand"
   },
   "keywords": [],
   "author": "",

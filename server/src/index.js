@@ -4,9 +4,6 @@ require('firebase/compat/auth');
 const express = require('express');
 const app = express();
 const path = require('path');
-const Client = require('@emailjs/nodejs');
-const { createCanvas, loadImage } = require('canvas');
-const QRCode = require('qrcode');
 
 // --- Firebase Admin SDK (centralized) ---
 const admin = require('./config/firebaseAdmin');
@@ -636,7 +633,6 @@ app.post("/signup", async (req, res) => {
 // Note: /login and /logout removed. Client must use Firebase Auth and send ID token in Authorization header.
 
 app.get("/p/", (req, res) => {
-    res.sendFile(path.join(publicDir, "index.html"));
     if (!req.query || Object.keys(req.query).length === 0) {
         console.log("No query parameters found in request.");
     } else {
@@ -658,6 +654,7 @@ app.get("/p/", (req, res) => {
             return res.status(400).send("Invalid email.");
         }
     }
+    return res.sendFile(path.join(publicDir, "index.html"));
 
 });
 

@@ -1,7 +1,7 @@
 Smart Courier Box — Raspberry Pi installation guide
 ========================================
 
-This guide complements `py/setup_pi.sh`. Follow these steps on your Raspberry Pi 3B+ to prepare the system and run the physical controller in `py/app.py`.
+This guide complements `py/setup/setup_pi.sh`. Follow these steps on your Raspberry Pi 3B+ to prepare the system and run the physical controller in `py/app.py`.
 
 Prerequisites
 -------------
@@ -14,7 +14,8 @@ Quick setup (automated)
 1. Place this project on the Pi and cd into the repository root.
 2. Run the setup script from the repo root (it will create a venv inside `py/`):
 
-   sudo bash py/setup_pi.sh
+   cd py
+   sudo bash setup/setup_pi.sh
 
 3. Reboot if the script recommends it.
 4. After reboot, activate the venv and run the app:
@@ -57,7 +58,7 @@ Manual steps and explanation
    python3 -m venv venv
    source venv/bin/activate
    python -m pip install --upgrade pip setuptools wheel
-   pip install -r requirements.txt
+   pip install -r setup/requirements.txt
 
    If pip install fails for OpenCV on the Pi, try `opencv-python-headless` or install OpenCV via apt or build from source.
 
@@ -107,9 +108,8 @@ Use the standalone scanner to verify camera + QR decoding:
 ```
 cd py
 source venv/bin/activate
-python3 qr_scan.py --timeout 30             # uses OpenCV VideoCapture(0)
-python3 qr_scan.py --timeout 30 --preview   # shows window if you have a desktop
-python3 qr_scan.py --libcamera              # fallback via libcamera-still when OpenCV capture fails
+python3 dev/qr_scan.py --timeout 30             # uses OpenCV VideoCapture(0)
+python3 dev/qr_scan.py --timeout 30 --preview   # shows window if you have a desktop
+python3 dev/qr_scan.py --libcamera              # fallback via libcamera-still when OpenCV capture fails
 ```
 If you see "No QR detected", try better lighting, move the code closer, or use the `--libcamera` fallback on Bullseye.
-
